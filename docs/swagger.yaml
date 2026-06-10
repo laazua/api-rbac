@@ -1,0 +1,1031 @@
+basePath: /api/v1
+definitions:
+  api-rbac_internal_model.AssignPermissionsRequest:
+    properties:
+      permission_ids:
+        description: '例: [1, 2, 3]'
+        items:
+          type: integer
+        type: array
+    required:
+    - permission_ids
+    type: object
+  api-rbac_internal_model.AssignRolesRequest:
+    properties:
+      role_ids:
+        description: '例: [1, 2]'
+        items:
+          type: integer
+        type: array
+    required:
+    - role_ids
+    type: object
+  api-rbac_internal_model.ChangePasswordRequest:
+    properties:
+      new_password:
+        example: new123456
+        maxLength: 128
+        minLength: 6
+        type: string
+      old_password:
+        example: old123456
+        maxLength: 128
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  api-rbac_internal_model.CheckPermissionRequest:
+    properties:
+      action:
+        example: delete
+        maxLength: 64
+        minLength: 1
+        type: string
+      resource:
+        example: user
+        maxLength: 64
+        minLength: 1
+        type: string
+    required:
+    - action
+    - resource
+    type: object
+  api-rbac_internal_model.CreatePermissionRequest:
+    properties:
+      action:
+        example: delete
+        maxLength: 64
+        minLength: 2
+        type: string
+      description:
+        example: 允许删除其他用户账号
+        maxLength: 255
+        type: string
+      name:
+        example: 删除用户
+        maxLength: 64
+        minLength: 2
+        type: string
+      resource:
+        example: user
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - action
+    - name
+    - resource
+    type: object
+  api-rbac_internal_model.CreateRoleRequest:
+    properties:
+      description:
+        example: 负责内容编辑的角色
+        maxLength: 255
+        type: string
+      name:
+        example: 编辑员
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - name
+    type: object
+  api-rbac_internal_model.CreateUserRequest:
+    properties:
+      email:
+        example: zhangsan@example.com
+        maxLength: 128
+        type: string
+      password:
+        example: "123456"
+        maxLength: 128
+        minLength: 6
+        type: string
+      username:
+        example: zhangsan
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  api-rbac_internal_model.LoginRequest:
+    properties:
+      account:
+        example: admin
+        maxLength: 128
+        minLength: 2
+        type: string
+      password:
+        example: admin123
+        maxLength: 128
+        type: string
+    required:
+    - account
+    - password
+    type: object
+  api-rbac_internal_model.Permission:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      resource:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api-rbac_internal_model.Role:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      permissions:
+        items:
+          $ref: '#/definitions/api-rbac_internal_model.Permission'
+        type: array
+      updated_at:
+        type: string
+    type: object
+  api-rbac_internal_model.UpdatePermissionRequest:
+    properties:
+      action:
+        example: delete
+        maxLength: 64
+        minLength: 2
+        type: string
+      description:
+        example: 允许删除任意用户账号
+        maxLength: 255
+        type: string
+      name:
+        example: 删除任意用户
+        maxLength: 64
+        minLength: 2
+        type: string
+      resource:
+        example: user
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - action
+    - name
+    - resource
+    type: object
+  api-rbac_internal_model.UpdateRoleRequest:
+    properties:
+      description:
+        example: 负责高级内容编辑的角色
+        maxLength: 255
+        type: string
+      name:
+        example: 高级编辑员
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - name
+    type: object
+  api-rbac_internal_model.UpdateUserRequest:
+    properties:
+      email:
+        example: newemail@example.com
+        maxLength: 128
+        type: string
+      status:
+        enum:
+        - 0
+        - 1
+        type: integer
+    type: object
+  api-rbac_internal_model.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      roles:
+        items:
+          $ref: '#/definitions/api-rbac_internal_model.Role'
+        type: array
+      status:
+        type: integer
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  api-rbac_pkg_response.PageData:
+    properties:
+      list: {}
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api-rbac_pkg_response.Response:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: 通用的 RBAC 权限管理微服务，支持用户/角色/权限的 CRUD 及绑定关系管理。
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: RBAC 权限管理系统 API
+  version: "1.0"
+paths:
+  /auth/check:
+    post:
+      consumes:
+      - application/json
+      description: 检查当前用户是否拥有对指定资源的指定操作权限。业务系统在执行敏感操作前调用此接口做鉴权。
+      parameters:
+      - description: 权限检查参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.CheckPermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 有权限
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  properties:
+                    allowed:
+                      type: boolean
+                  type: object
+              type: object
+        "403":
+          description: 无权限
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  properties:
+                    allowed:
+                      type: boolean
+                  type: object
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 检查权限
+      tags:
+      - 认证
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名或邮箱登录，返回 JWT Token
+      parameters:
+      - description: 登录参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登录成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  properties:
+                    token:
+                      type: string
+                    user_id:
+                      type: integer
+                    username:
+                      type: string
+                  type: object
+              type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "401":
+          description: 密码错误或用户禁用
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      summary: 用户登录
+      tags:
+      - 认证
+  /auth/logout:
+    post:
+      description: 无状态 JWT，客户端丢弃 Token 即完成登出
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 登出成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 用户登出
+      tags:
+      - 认证
+  /auth/verify:
+    post:
+      description: 验证 JWT Token 是否有效，返回用户基本信息。业务系统在收到请求时可调用此接口确认 Token 有效性。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token有效
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  properties:
+                    user_id:
+                      type: integer
+                    username:
+                      type: string
+                  type: object
+              type: object
+        "401":
+          description: Token无效或已过期
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 验证Token
+      tags:
+      - 认证
+  /permissions:
+    get:
+      description: 分页查询权限列表，支持关键词搜索
+      parameters:
+      - default: 1
+        description: 页码
+        example: 1
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页条数
+        example: 10
+        in: query
+        name: page_size
+        type: integer
+      - description: 搜索关键词(权限名/资源/操作)
+        example: 删除
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_pkg_response.PageData'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 权限列表
+      tags:
+      - 权限管理
+    post:
+      consumes:
+      - application/json
+      description: 新增一个权限定义
+      parameters:
+      - description: 创建权限参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.CreatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_internal_model.Permission'
+              type: object
+        "400":
+          description: 参数错误或权限名已存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建权限
+      tags:
+      - 权限管理
+  /permissions/{id}:
+    delete:
+      description: 根据 ID 删除一个权限
+      parameters:
+      - description: 权限ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 权限不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除权限
+      tags:
+      - 权限管理
+    get:
+      description: 根据 ID 获取权限信息
+      parameters:
+      - description: 权限ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_internal_model.Permission'
+              type: object
+        "404":
+          description: 权限不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取权限详情
+      tags:
+      - 权限管理
+    put:
+      consumes:
+      - application/json
+      description: 更新权限的名称、资源和操作
+      parameters:
+      - description: 权限ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.UpdatePermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 权限不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新权限
+      tags:
+      - 权限管理
+  /roles:
+    get:
+      description: 分页查询角色列表，支持关键词搜索
+      parameters:
+      - default: 1
+        description: 页码
+        example: 1
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页条数
+        example: 10
+        in: query
+        name: page_size
+        type: integer
+      - description: 搜索关键词(角色名/描述)
+        example: 管理员
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_pkg_response.PageData'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 角色列表
+      tags:
+      - 角色管理
+    post:
+      consumes:
+      - application/json
+      description: 新增一个角色
+      parameters:
+      - description: 创建角色参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_internal_model.Role'
+              type: object
+        "400":
+          description: 参数错误或角色名已存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建角色
+      tags:
+      - 角色管理
+  /roles/{id}:
+    delete:
+      description: 根据 ID 删除一个角色
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 角色不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除角色
+      tags:
+      - 角色管理
+    get:
+      description: 根据 ID 获取角色信息，包含关联的权限列表
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_internal_model.Role'
+              type: object
+        "404":
+          description: 角色不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取角色详情
+      tags:
+      - 角色管理
+    put:
+      consumes:
+      - application/json
+      description: 更新角色的名称和描述
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 角色不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新角色
+      tags:
+      - 角色管理
+  /roles/{id}/permissions:
+    post:
+      consumes:
+      - application/json
+      description: 覆盖式更新角色的权限列表
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 权限ID列表
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.AssignPermissionsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分配成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 角色不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 为角色分配权限
+      tags:
+      - 角色管理
+  /roles/{id}/permissions/{permId}:
+    delete:
+      description: 移除角色的某个权限
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 权限ID
+        in: path
+        name: permId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 移除成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 角色不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 移除角色权限
+      tags:
+      - 角色管理
+  /users:
+    get:
+      description: 分页查询用户列表，支持关键词搜索
+      parameters:
+      - default: 1
+        description: 页码
+        example: 1
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 每页条数
+        example: 10
+        in: query
+        name: page_size
+        type: integer
+      - description: 搜索关键词(用户名/邮箱)
+        example: admin
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_pkg_response.PageData'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 用户列表
+      tags:
+      - 用户管理
+    post:
+      consumes:
+      - application/json
+      description: 新增一个用户
+      parameters:
+      - description: 创建用户参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_internal_model.User'
+              type: object
+        "400":
+          description: 参数错误或用户名已存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建用户
+      tags:
+      - 用户管理
+  /users/{id}:
+    delete:
+      description: 根据 ID 删除一个用户
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除用户
+      tags:
+      - 用户管理
+    get:
+      description: 根据 ID 获取用户信息，包含关联的角色和权限
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 查询成功
+          schema:
+            allOf:
+            - $ref: '#/definitions/api-rbac_pkg_response.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/api-rbac_internal_model.User'
+              type: object
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取用户详情
+      tags:
+      - 用户管理
+    put:
+      consumes:
+      - application/json
+      description: 更新用户的邮箱和状态
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新用户
+      tags:
+      - 用户管理
+  /users/{id}/password:
+    put:
+      consumes:
+      - application/json
+      description: 修改指定用户的密码，需提供旧密码验证
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 修改密码参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 修改成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "400":
+          description: 旧密码错误
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 修改密码
+      tags:
+      - 用户管理
+  /users/{id}/roles:
+    post:
+      consumes:
+      - application/json
+      description: 覆盖式更新用户的角色列表
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色ID列表
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api-rbac_internal_model.AssignRolesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分配成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 为用户分配角色
+      tags:
+      - 用户管理
+  /users/{id}/roles/{roleId}:
+    delete:
+      description: 移除用户的某个角色
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色ID
+        in: path
+        name: roleId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 移除成功
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+        "404":
+          description: 用户不存在
+          schema:
+            $ref: '#/definitions/api-rbac_pkg_response.Response'
+      security:
+      - BearerAuth: []
+      summary: 移除用户角色
+      tags:
+      - 用户管理
+securityDefinitions:
+  BearerAuth:
+    description: 输入 Bearer {token} 格式的 JWT Token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

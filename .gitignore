@@ -1,0 +1,29 @@
+# 编译产物
+api-rbac
+*.exe
+*.test
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# 配置文件 (含敏感信息，仅保留模板)
+config/config.yaml
+
+# 日志
+*.log
+
+# 临时文件
+tmp/
+temp/

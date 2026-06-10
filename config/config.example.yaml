@@ -1,0 +1,19 @@
+server:
+  mode: debug
+  port: 8087
+
+db:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: "your_db_password"
+  dbname: api_rbac
+  charset: utf8mb4
+
+jwt:
+  secret: "change-me-in-production"
+  expire_hour: 24
+
+cors:
+  allow_origins:
+    - "*"
