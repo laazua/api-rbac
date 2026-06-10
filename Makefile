@@ -1,8 +1,10 @@
+target := apiRbac
+
 .PHONY: build run test clean fmt vet
 
 # 构建
 build:
-	go build -o api-rbac ./cmd/server
+	go build -o $(target) ./cmd/server
 
 # 运行
 run:
@@ -22,7 +24,7 @@ vet:
 
 # 清理
 clean:
-	rm -f api-rbac
+	rm -f $(target)
 
 # 安装依赖
 deps:
