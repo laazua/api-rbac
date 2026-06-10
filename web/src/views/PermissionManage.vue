@@ -10,7 +10,7 @@
         </el-col>
         <el-col :span="4">
           <el-button type="primary" icon="el-icon-search" @click="fetchData">搜索</el-button>
-          <el-button type="success" icon="el-icon-plus" @click="openCreate">新增权限</el-button>
+          <el-button v-if="hasPermission('permission','create')" type="success" icon="el-icon-plus" @click="openCreate">新增权限</el-button>
         </el-col>
       </el-row>
     </div>
@@ -35,8 +35,8 @@
         </el-table-column>
         <el-table-column label="操作" width="160">
           <template slot-scope="{ row }">
-            <el-button type="text" icon="el-icon-edit" @click="openEdit(row)">编辑</el-button>
-            <el-button type="text" style="color:#f56c6c" icon="el-icon-delete" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="hasPermission('permission','update')" type="text" icon="el-icon-edit" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="hasPermission('permission','delete')" type="text" style="color:#f56c6c" icon="el-icon-delete" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -86,7 +86,7 @@
 
 <script>
 import {
-  getPermissions, createPermission, updatePermission, deletePermission
+  getPermissions, createPermission, updatePermission, deletePermission, hasPermission
 } from '../api'
 
 export default {
@@ -107,6 +107,7 @@ export default {
   },
   created() { this.fetchData() },
   methods: {
+    hasPermission,
     async fetchData() {
       this.loading = true
       try {

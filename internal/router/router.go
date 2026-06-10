@@ -8,6 +8,7 @@ import (
 	"api-rbac/config"
 	"api-rbac/internal/handler"
 	"api-rbac/internal/middleware"
+	"api-rbac/internal/service"
 )
 
 func Setup(
@@ -16,6 +17,7 @@ func Setup(
 	roleH *handler.RoleHandler,
 	permH *handler.PermissionHandler,
 	cfg *config.Config,
+	permCheckSvc *service.PermissionCheckService,
 ) *gin.Engine {
 	r := gin.Default()
 
@@ -43,45 +45,58 @@ func Setup(
 		authed := api.Group("")
 		authed.Use(middleware.AuthRequired())
 		{
-			// 登出
+			// 登出 & Token验证 & 权限检查 & 菜单
 			authed.POST("/auth/logout", authH.Logout)
-			// Token验证与权限检查 (业务系统集成接口)
 			authed.POST("/auth/verify", authH.Verify)
 			authed.POST("/auth/check", authH.Check)
+			authed.GET("/auth/menu", authH.Menu)
 
-			// 用户管理
+			// ---- 用户管理 ----
 			users := authed.Group("/users")
+			users.Use(middleware.RequirePermission(permCheckSvc, "user", "read"))
 			{
 				users.GET("", userH.List)
-				users.POST("", userH.Create)
 				users.GET("/:id", userH.GetByID)
-				users.PUT("/:id", userH.Update)
-				users.DELETE("/:id", userH.Delete)
-				users.PUT("/:id/password", userH.ChangePassword)
-				users.POST("/:id/roles", userH.AssignRoles)
-				users.DELETE("/:id/roles/:roleId", userH.RemoveRole)
+			}
+			// 用户写操作需要额外权限
+			usersWrite := authed.Group("/users")
+			{
+				usersWrite.POST("", middleware.RequirePermission(permCheckSvc, "user", "create"), userH.Create)
+				usersWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "user", "update"), userH.Update)
+				usersWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "user", "delete"), userH.Delete)
+				usersWrite.PUT("/:id/password", middleware.RequirePermission(permCheckSvc, "user", "update"), userH.ChangePassword)
+				usersWrite.POST("/:id/roles", middleware.RequirePermission(permCheckSvc, "user", "update"), userH.AssignRoles)
+				usersWrite.DELETE("/:id/roles/:roleId", middleware.RequirePermission(permCheckSvc, "user", "update"), userH.RemoveRole)
 			}
 
-			// 角色管理
+			// ---- 角色管理 ----
 			roles := authed.Group("/roles")
+			roles.Use(middleware.RequirePermission(permCheckSvc, "role", "read"))
 			{
 				roles.GET("", roleH.List)
-				roles.POST("", roleH.Create)
 				roles.GET("/:id", roleH.GetByID)
-				roles.PUT("/:id", roleH.Update)
-				roles.DELETE("/:id", roleH.Delete)
-				roles.POST("/:id/permissions", roleH.AssignPermissions)
-				roles.DELETE("/:id/permissions/:permId", roleH.RemovePermission)
+			}
+			rolesWrite := authed.Group("/roles")
+			{
+				rolesWrite.POST("", middleware.RequirePermission(permCheckSvc, "role", "create"), roleH.Create)
+				rolesWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.Update)
+				rolesWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "role", "delete"), roleH.Delete)
+				rolesWrite.POST("/:id/permissions", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.AssignPermissions)
+				rolesWrite.DELETE("/:id/permissions/:permId", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.RemovePermission)
 			}
 
-			// 权限管理
-			permissions := authed.Group("/permissions")
+			// ---- 权限管理 ----
+			perms := authed.Group("/permissions")
+			perms.Use(middleware.RequirePermission(permCheckSvc, "permission", "read"))
 			{
-				permissions.GET("", permH.List)
-				permissions.POST("", permH.Create)
-				permissions.GET("/:id", permH.GetByID)
-				permissions.PUT("/:id", permH.Update)
-				permissions.DELETE("/:id", permH.Delete)
+				perms.GET("", permH.List)
+				perms.GET("/:id", permH.GetByID)
+			}
+			permsWrite := authed.Group("/permissions")
+			{
+				permsWrite.POST("", middleware.RequirePermission(permCheckSvc, "permission", "create"), permH.Create)
+				permsWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "permission", "update"), permH.Update)
+				permsWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "permission", "delete"), permH.Delete)
 			}
 		}
 	}

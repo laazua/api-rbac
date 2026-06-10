@@ -31,7 +31,7 @@
 </template>
 
 <script>
-import { login } from '../api'
+import { login, getMenu } from '../api'
 
 export default {
   name: 'Login',
@@ -54,6 +54,11 @@ export default {
           const res = await login(this.form.account, this.form.password)
           localStorage.setItem('token', res.data.token)
           localStorage.setItem('username', res.data.username)
+          // 获取用户权限
+          try {
+            const menuRes = await getMenu()
+            localStorage.setItem('permissions', JSON.stringify(menuRes.data.permissions || {}))
+          } catch { /* 忽略 */ }
           this.$message.success('登录成功')
           this.$router.push('/dashboard')
         } catch {

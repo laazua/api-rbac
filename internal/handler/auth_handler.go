@@ -85,6 +85,30 @@ func (h *AuthHandler) Verify(c *gin.Context) {
 	})
 }
 
+// Menu 获取用户菜单
+// @Summary      获取用户菜单
+// @Description  返回当前用户拥有的权限列表，用于前端动态生成菜单和控制按钮显隐
+// @Tags         认证
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {object}  response.Response{data=object{permissions=object}}  "查询成功"
+// @Router       /auth/menu [get]
+func (h *AuthHandler) Menu(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		response.Error(c, errcode.Unauthorized)
+		return
+	}
+
+	perms, err := h.permService.GetUserPermissions(userID.(uint))
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"permissions": perms})
+}
+
 // Check 检查权限
 // @Summary      检查权限
 // @Description  检查当前用户是否拥有对指定资源的指定操作权限。业务系统在执行敏感操作前调用此接口做鉴权。

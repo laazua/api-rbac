@@ -1,14 +1,14 @@
 <template>
   <el-container style="height: 100%">
     <!-- 侧边栏 -->
-    <el-aside width="220px" class="layout-sidebar">
-      <div
-        style="height:60px;line-height:60px;text-align:center;color:#fff;font-size:18px;font-weight:bold;background:#1f2d3d;border-bottom:1px solid #2d3f51"
-      >
-        RBAC 管理系统
+    <el-aside :width="collapsed ? '64px' : '220px'" class="layout-sidebar">
+      <div class="sidebar-brand">
+        <span v-show="!collapsed">RBAC 管理系统</span>
+        <span v-show="collapsed" style="font-size:14px">RBAC</span>
       </div>
       <el-menu
         :default-active="activeMenu"
+        :collapse="collapsed"
         background-color="#1f2d3d"
         text-color="#bfcbd9"
         active-text-color="#409eff"
@@ -29,7 +29,14 @@
     <el-container>
       <!-- 顶部 Header -->
       <el-header height="60px" class="layout-header">
-        <span class="logo">RBAC 权限管理系统</span>
+        <div class="header-left">
+          <i
+            :class="collapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"
+            class="collapse-btn"
+            @click="collapsed = !collapsed"
+          />
+          <span class="logo">RBAC 权限管理系统</span>
+        </div>
         <el-dropdown trigger="click" @command="handleCommand">
           <span class="user-info">
             <el-avatar size="small" icon="el-icon-user-solid" />
@@ -52,11 +59,14 @@
 </template>
 
 <script>
+import { hasAnyPermission } from '../api'
+
 export default {
   name: 'Layout',
   data() {
     return {
       username: localStorage.getItem('username') || 'admin',
+      collapsed: false,
       menuItems: []
     }
   },
@@ -66,11 +76,17 @@ export default {
     }
   },
   created() {
-    this.menuItems = this.$router.options.routes
+    const allItems = this.$router.options.routes
       .find(r => r.path === '/')
       .children
       .filter(c => c.meta && c.meta.title)
-      .map(c => ({ path: '/' + c.path, title: c.meta.title, icon: c.meta.icon }))
+      .map(c => ({ path: '/' + c.path, title: c.meta.title, icon: c.meta.icon, resource: c.meta.resource }))
+
+    // 根据权限过滤菜单：仪表盘始终可见，其余菜单需要至少 read 权限
+    this.menuItems = allItems.filter(item => {
+      if (item.path === '/dashboard') return true
+      return hasAnyPermission(item.resource)
+    })
   },
   methods: {
     handleCommand(cmd) {
@@ -84,3 +100,38 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.sidebar-brand {
+  height: 60px;
+  line-height: 60px;
+  text-align: center;
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+  background: #1f2d3d;
+  border-bottom: 1px solid #2d3f51;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: all 0.3s;
+}
+
+.collapse-btn {
+  font-size: 22px;
+  cursor: pointer;
+  margin-right: 12px;
+  transition: color 0.2s;
+}
+.collapse-btn:hover {
+  color: #409eff;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.layout-sidebar {
+  transition: width 0.3s;
+}
+</style>

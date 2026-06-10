@@ -106,7 +106,7 @@ func main() {
 	permH := handler.NewPermissionHandler(permService)
 
 	// 设置路由
-	r := router.Setup(authH, userH, roleH, permH, cfg)
+	r := router.Setup(authH, userH, roleH, permH, cfg, permCheckService)
 
 	// 创建 HTTP Server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

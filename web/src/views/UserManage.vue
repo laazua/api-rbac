@@ -11,7 +11,7 @@
         </el-col>
         <el-col :span="4">
           <el-button type="primary" icon="el-icon-search" @click="fetchData">搜索</el-button>
-          <el-button type="success" icon="el-icon-plus" @click="openCreate">新增用户</el-button>
+          <el-button v-if="hasPermission('user','create')" type="success" icon="el-icon-plus" @click="openCreate">新增用户</el-button>
         </el-col>
       </el-row>
     </div>
@@ -34,10 +34,10 @@
         </el-table-column>
         <el-table-column label="操作" min-width="280">
           <template slot-scope="{ row }">
-            <el-button type="text" size="small" icon="el-icon-edit" @click="openEdit(row)">编辑</el-button>
-            <el-button type="text" size="small" icon="el-icon-key" @click="openChangePwd(row)">改密</el-button>
-            <el-button type="text" size="small" icon="el-icon-s-custom" @click="openAssignRoles(row)">分配角色</el-button>
-            <el-button type="text" size="small" style="color:#f56c6c" icon="el-icon-delete" @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="hasPermission('user','update')" type="text" size="small" icon="el-icon-edit" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="hasPermission('user','update')" type="text" size="small" icon="el-icon-key" @click="openChangePwd(row)">改密</el-button>
+            <el-button v-if="hasPermission('user','update')" type="text" size="small" icon="el-icon-s-custom" @click="openAssignRoles(row)">分配角色</el-button>
+            <el-button v-if="hasPermission('user','delete')" type="text" size="small" style="color:#f56c6c" icon="el-icon-delete" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -114,7 +114,7 @@
 <script>
 import {
   getUsers, createUser, updateUser, deleteUser, changePassword,
-  assignUserRoles, getRoles, getUser
+  assignUserRoles, getRoles, getUser, hasPermission
 } from '../api'
 
 export default {
@@ -141,6 +141,7 @@ export default {
   },
   created() { this.fetchData() },
   methods: {
+    hasPermission,
     async fetchData() {
       this.loading = true
       try {

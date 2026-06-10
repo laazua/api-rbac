@@ -57,6 +57,38 @@ export function checkPermission(resource, action) {
   return request.post('/auth/check', { resource, action })
 }
 
+/** 获取当前用户权限菜单 */
+export function getMenu() {
+  return request.get('/auth/menu')
+}
+
+// ===== 前端权限辅助 =====
+
+/** 判断是否有指定权限 */
+export function hasPermission(resource, action) {
+  try {
+    const perms = JSON.parse(localStorage.getItem('permissions') || '{}')
+    // 通配符
+    if (perms['*'] && perms['*'].includes('*')) return true
+    if (perms[resource] && perms[resource].includes('*')) return true
+    if (perms['*'] && perms['*'].includes(action)) return true
+    return perms[resource] && perms[resource].includes(action)
+  } catch {
+    return false
+  }
+}
+
+/** 判断是否有至少一个权限（用于菜单显示） */
+export function hasAnyPermission(resource) {
+  try {
+    const perms = JSON.parse(localStorage.getItem('permissions') || '{}')
+    if (perms['*']) return true
+    return perms[resource] && perms[resource].length > 0
+  } catch {
+    return false
+  }
+}
+
 // ===== 用户管理 =====
 
 export function getUsers(params) {
