@@ -18,25 +18,34 @@
       </el-card>
     </div>
 
-    <!-- 快速入口 -->
+    <!-- 快速入口 — 仅显示有权限的模块 -->
     <el-card style="border-radius:8px">
       <div slot="header"><b>快速入口</b></div>
       <el-row :gutter="16">
         <el-col :span="8">
-          <el-button type="primary" plain style="width:100%;height:80px;font-size:16px"
-            icon="el-icon-user" @click="$router.push('/users')">
+          <el-button
+            type="primary" plain style="width:100%;height:80px;font-size:16px"
+            icon="el-icon-user" :disabled="!canAccessUser"
+            @click="$router.push('/users')"
+          >
             用户管理
           </el-button>
         </el-col>
         <el-col :span="8">
-          <el-button type="success" plain style="width:100%;height:80px;font-size:16px"
-            icon="el-icon-s-custom" @click="$router.push('/roles')">
+          <el-button
+            type="success" plain style="width:100%;height:80px;font-size:16px"
+            icon="el-icon-s-custom" :disabled="!canAccessRole"
+            @click="$router.push('/roles')"
+          >
             角色管理
           </el-button>
         </el-col>
         <el-col :span="8">
-          <el-button type="warning" plain style="width:100%;height:80px;font-size:16px"
-            icon="el-icon-lock" @click="$router.push('/permissions')">
+          <el-button
+            type="warning" plain style="width:100%;height:80px;font-size:16px"
+            icon="el-icon-lock" :disabled="!canAccessPerm"
+            @click="$router.push('/permissions')"
+          >
             权限管理
           </el-button>
         </el-col>
@@ -46,26 +55,34 @@
 </template>
 
 <script>
-import { getUsers, getRoles, getPermissions } from '../api'
+import { getUsers, getRoles, getPermissions, hasAnyPermission } from '../api'
 
 export default {
   name: 'Dashboard',
   data() {
     return {
-      stats: { users: 0, roles: 0, permissions: 0 }
+      stats: { users: '-', roles: '-', permissions: '-' },
+      canAccessUser: false,
+      canAccessRole: false,
+      canAccessPerm: false
     }
   },
   async created() {
-    try {
-      const [u, r, p] = await Promise.all([
-        getUsers({ page: 1, page_size: 1 }),
-        getRoles({ page: 1, page_size: 1 }),
-        getPermissions({ page: 1, page_size: 1 })
-      ])
-      this.stats.users = u.data.total
-      this.stats.roles = r.data.total
-      this.stats.permissions = p.data.total
-    } catch { /* 忽略 */ }
+    this.canAccessUser = hasAnyPermission('user')
+    this.canAccessRole = hasAnyPermission('role')
+    this.canAccessPerm = hasAnyPermission('permission')
+
+    const tasks = []
+    if (this.canAccessUser) {
+      tasks.push(getUsers({ page: 1, page_size: 1 }).then(r => { this.stats.users = r.data.total }).catch(() => {}))
+    }
+    if (this.canAccessRole) {
+      tasks.push(getRoles({ page: 1, page_size: 1 }).then(r => { this.stats.roles = r.data.total }).catch(() => {}))
+    }
+    if (this.canAccessPerm) {
+      tasks.push(getPermissions({ page: 1, page_size: 1 }).then(r => { this.stats.permissions = r.data.total }).catch(() => {}))
+    }
+    await Promise.all(tasks)
   }
 }
 </script>

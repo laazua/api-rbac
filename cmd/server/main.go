@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -48,8 +49,12 @@ import (
 // @description 输入 Bearer {token} 格式的 JWT Token
 
 func main() {
+	// 解析命令行参数
+	configPath := flag.String("c", "config.yaml", "配置文件路径")
+	flag.Parse()
+
 	// 加载配置
-	cfg, err := config.Load("")
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
 	}

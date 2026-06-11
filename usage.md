@@ -63,8 +63,14 @@ make build
 # 首次启动 — 设置超级管理员密码
 ./api-rbac
 
-# 后续启动
-./api-rbac
+# 指定配置文件启动
+./api-rbac -c /path/to/custom_config.yaml
+
+# 查看帮助
+./api-rbac --help
+```
+
+> `-c` 指定配置文件路径，默认使用 `config/config.yaml`。
 ```
 
 > 首次启动时会交互式提示设置 admin 用户密码，数据表自动创建。
