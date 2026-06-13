@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>运维管理系统</title>
+<style>
+  :root {
+    --bg: #f0f2f5;
+    --white: #fff;
+    --primary: #409eff;
+    --danger: #f56c6c;
+    --success: #67c23a;
+    --warning: #e6a23c;
+    --border: #dcdfe6;
+    --text: #303133;
+    --text-secondary: #909399;
+    --radius: 6px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  /* ===== 登录页 ===== */
+  .login-container { display:flex; justify-content:center; align-items:center; min-height:100vh; }
+  .login-box { background:var(--white); padding:40px; border-radius:12px; box-shadow:var(--shadow); width:400px; }
+  .login-box h1 { text-align:center; margin-bottom:8px; font-size:24px; }
+  .login-box .subtitle { text-align:center; color:var(--text-secondary); margin-bottom:30px; font-size:14px; }
+  .form-group { margin-bottom:20px; }
+  .form-group label { display:block; margin-bottom:6px; font-weight:500; font-size:14px; }
+  .form-group input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); font-size:14px; outline:none; transition:border-color .2s; }
+  .form-group input:focus { border-color:var(--primary); }
+  .error-msg { color:var(--danger); font-size:13px; margin-bottom:16px; display:none; }
+
+  /* ===== 主布局 ===== */
+  .app-container { display:flex; min-height:100vh; }
+  .sidebar { width:240px; background:#304156; color:#bfcbd9; display:flex; flex-direction:column; flex-shrink:0; }
+  .sidebar-header { padding:20px; border-bottom:1px solid rgba(255,255,255,0.1); }
+  .sidebar-header h2 { font-size:18px; color:#fff; }
+  .sidebar-header .user-info { font-size:12px; margin-top:6px; opacity:0.7; }
+  .nav-menu { list-style:none; padding:10px 0; flex:1; }
+  .nav-menu li a { display:flex; align-items:center; padding:12px 20px; color:#bfcbd9; text-decoration:none; font-size:14px; transition:all .2s; cursor:pointer; }
+  .nav-menu li a:hover, .nav-menu li a.active { background:rgba(255,255,255,0.05); color:#fff; }
+  .nav-menu li a .icon { margin-right:10px; font-size:16px; width:20px; text-align:center; }
+  .sidebar-footer { padding:16px 20px; border-top:1px solid rgba(255,255,255,0.1); }
+  .logout-btn { background:transparent; border:1px solid rgba(255,255,255,0.3); color:#bfcbd9; padding:8px 16px; border-radius:var(--radius); cursor:pointer; width:100%; font-size:13px; }
+  .logout-btn:hover { background:rgba(255,255,255,0.1); color:#fff; }
+
+  .main-content { flex:1; padding:24px; overflow-y:auto; }
+  .page-header { margin-bottom:24px; }
+  .page-header h3 { font-size:20px; }
+
+  /* ===== 卡片 + 表格 ===== */
+  .card { background:var(--white); border-radius:8px; box-shadow:var(--shadow); padding:20px; margin-bottom:16px; }
+  .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .card-header h4 { font-size:16px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:12px 8px; border-bottom:1px solid var(--border); font-size:13px; }
+  th { color:var(--text-secondary); font-weight:500; background:#fafafa; }
+  tr:hover td { background:#f5f7fa; }
+
+  /* ===== 按钮 ===== */
+  .btn { display:inline-flex; align-items:center; padding:8px 16px; border:none; border-radius:var(--radius); font-size:13px; cursor:pointer; transition:opacity .2s; margin-right:8px; }
+  .btn-primary { background:var(--primary); color:#fff; }
+  .btn-danger { background:var(--danger); color:#fff; }
+  .btn-success { background:var(--success); color:#fff; }
+  .btn-warning { background:var(--warning); color:#fff; }
+  .btn-default { background:#f5f7fa; color:var(--text); border:1px solid var(--border); }
+  .btn:hover { opacity:0.85; }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+  .tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+  .tag-running { background:#e1f3d8; color:var(--success); }
+  .tag-stopped { background:#fef0f0; color:var(--danger); }
+  .tag-success { background:#e1f3d8; color:var(--success); }
+  .tag-failed { background:#fef0f0; color:var(--danger); }
+  .tag-pending { background:#fdf6ec; color:var(--warning); }
+  .tag-rolled_back { background:#f4f4f5; color:var(--text-secondary); }
+
+  .empty-state { text-align:center; padding:60px; color:var(--text-secondary); }
+  .empty-state .icon { font-size:48px; margin-bottom:12px; }
+  .toast { position:fixed; top:24px; right:24px; padding:12px 20px; border-radius:var(--radius); color:#fff; font-size:14px; z-index:9999; opacity:0; transition:opacity .3s; }
+  .toast.show { opacity:1; }
+  .toast-success { background:var(--success); }
+  .toast-error { background:var(--danger); }
+
+  /* 权限标签 */
+  .perm-badge { display:inline-block; background:#ecf5ff; color:var(--primary); padding:2px 8px; border-radius:10px; font-size:11px; margin:2px; }
+  .no-perm-tip { color:var(--text-secondary); font-size:13px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== 登录页 ==================== -->
+<div id="loginPage" class="login-container">
+  <div class="login-box">
+    <h1>运维管理系统</h1>
+    <p class="subtitle">权限由 api-rbac 统一管理</p>
+    <div class="form-group">
+      <label>用户名 / 邮箱</label>
+      <input type="text" id="loginAccount" placeholder="请输入用户名或邮箱" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password">
+    </div>
+    <p id="loginError" class="error-msg"></p>
+    <button class="btn btn-primary" style="width:100%;padding:12px;" onclick="handleLogin()">登 录</button>
+    <p style="text-align:center;margin-top:16px;font-size:12px;color:var(--text-secondary);">
+      💡 登录验证由 api-rbac 微服务完成，本系统不存储密码
+    </p>
+  </div>
+</div>
+
+<!-- ==================== 主界面 ==================== -->
+<div id="appPage" class="app-container" style="display:none;">
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>🚀 运维管理</h2>
+      <div class="user-info">👤 <span id="sidebarUsername"></span></div>
+    </div>
+    <ul class="nav-menu" id="navMenu">
+      <!-- JS 根据权限动态渲染 -->
+    </ul>
+    <div class="sidebar-footer">
+      <button class="logout-btn" onclick="handleLogout()">退出登录</button>
+    </div>
+  </aside>
+
+  <!-- 内容区 -->
+  <main class="main-content">
+    <!-- 服务器管理页 -->
+    <div id="page-servers" class="page" style="display:none;">
+      <div class="page-header"><h3>🖥️ 服务器管理</h3></div>
+      <div class="card">
+        <div class="card-header">
+          <h4>服务器列表</h4>
+          <div>
+            <!-- 按钮根据权限显隐 -->
+          </div>
+        </div>
+        <div id="serversTable"></div>
+      </div>
+    </div>
+
+    <!-- 发布管理页 -->
+    <div id="page-deployments" class="page" style="display:none;">
+      <div class="page-header"><h3>📦 发布管理</h3></div>
+      <div class="card">
+        <div class="card-header">
+          <h4>发布记录</h4>
+          <button id="btnCreateDeploy" class="btn btn-primary" onclick="showDeployDialog()">➕ 新建发布</button>
+        </div>
+        <div id="deploymentsTable"></div>
+      </div>
+      <!-- 新建发布对话框 -->
+      <div id="deployDialog" class="card" style="display:none;">
+        <h4 style="margin-bottom:16px;">执行新发布</h4>
+        <div class="form-group"><label>项目名称</label><input type="text" id="deployProject" placeholder="如: web-app"></div>
+        <div class="form-group"><label>版本号</label><input type="text" id="deployVersion" placeholder="如: v2.3.1"></div>
+        <button class="btn btn-primary" onclick="executeDeploy()">执行发布</button>
+        <button class="btn btn-default" onclick="document.getElementById('deployDialog').style.display='none'">取消</button>
+      </div>
+    </div>
+
+    <!-- 告警管理页 -->
+    <div id="page-alerts" class="page" style="display:none;">
+      <div class="page-header"><h3>🔔 告警管理</h3></div>
+      <div class="card">
+        <div class="card-header"><h4>告警列表</h4></div>
+        <div id="alertsTable"></div>
+      </div>
+    </div>
+
+    <!-- 我的权限页 -->
+    <div id="page-permissions" class="page" style="display:none;">
+      <div class="page-header"><h3>🔑 我的权限</h3></div>
+      <div class="card">
+        <div class="card-header"><h4>当前用户拥有以下权限</h4></div>
+        <div id="myPermissions" style="line-height:2.2;"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- ==================== 核心 JS ==================== -->
+<script>
+// ========================
+// 全局状态
+// ========================
+const state = {
+  token: null,
+  refreshToken: null,
+  username: null,
+  permissions: {},  // { resource: [action, ...] }
+};
+
+// ========================
+// 权限辅助函数 — 前端 UI 显隐控制的核心
+// ========================
+
+/** 判断当前用户是否拥有指定权限 (纯前端判断，不做后端校验) */
+function hasPerm(resource, action) {
+  const perms = state.permissions;
+  // 通配符 *:* 拥有全部权限
+  if (perms['*'] && perms['*'].includes('*')) return true;
+  // resource:* 拥有该资源全部操作
+  if (perms[resource] && perms[resource].includes('*')) return true;
+  // *:action 拥有所有资源的该操作
+  if (perms['*'] && perms['*'].includes(action)) return true;
+  // 精确匹配
+  if (perms[resource] && perms[resource].includes(action)) return true;
+  return false;
+}
+
+/** 判断用户是否至少拥有指定资源的一个权限 (用于菜单显示) */
+function hasAnyPerm(resource) {
+  const perms = state.permissions;
+  if (perms['*']) return true;
+  return perms[resource] && perms[resource].length > 0;
+}
+
+// ========================
+// 菜单配置 — 定义哪些菜单需要什么权限
+// ========================
+const menuConfig = [
+  { key: 'servers',     label: '🖥️  服务器管理',  permission: 'server',     any: true },
+  { key: 'deployments', label: '📦 发布管理',    permission: 'deployment',  any: true },
+  { key: 'alerts',      label: '🔔 告警管理',    permission: 'alert',       any: true },
+  { key: 'permissions', label: '🔑 我的权限',    permission: null,          any: false }, // 所有人可见
+];
+
+// ========================
+// 登录
+// ========================
+async function handleLogin() {
+  const account = document.getElementById('loginAccount').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+  const errEl = document.getElementById('loginError');
+
+  if (!account || !password) {
+    errEl.textContent = '请输入用户名和密码';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    // 登录请求 → 业务系统后端 → api-rbac
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account, password }),
+    });
+    const data = await resp.json();
+
+    if (data.code !== 0) {
+      errEl.textContent = data.message || '登录失败';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // 保存 Token
+    state.token = data.data.token;
+    state.refreshToken = data.data.refresh_token;
+    state.username = data.data.username;
+    localStorage.setItem('token', state.token);
+    localStorage.setItem('refresh_token', state.refreshToken);
+    localStorage.setItem('username', state.username);
+
+    // 加载权限
+    await loadPermissions();
+
+    // 切到主界面
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('appPage').style.display = 'flex';
+    document.getElementById('sidebarUsername').textContent = state.username;
+
+    renderMenu();
+    navigateTo('servers'); // 默认打开第一个有权限的页面
+    showToast('登录成功', 'success');
+
+  } catch (e) {
+    errEl.textContent = '网络错误，请检查服务是否启动';
+    errEl.style.display = 'block';
+  }
+}
+
+// ========================
+// 加载权限
+// ========================
+async function loadPermissions() {
+  try {
+    const resp = await fetch('/api/user/permissions', {
+      headers: { 'Authorization': `Bearer ${state.token}` },
+    });
+    const data = await resp.json();
+    if (data.code === 0) {
+      state.permissions = data.data;
+      localStorage.setItem('permissions', JSON.stringify(data.data));
+    }
+  } catch (e) {
+    // 从 localStorage 恢复
+    const cached = localStorage.getItem('permissions');
+    if (cached) state.permissions = JSON.parse(cached);
+  }
+}
+
+// ========================
+// 菜单渲染 — 第一层控制：哪些菜单可见
+// ========================
+function renderMenu() {
+  const nav = document.getElementById('navMenu');
+  nav.innerHTML = '';
+
+  for (const item of menuConfig) {
+    // 需要权限的菜单，检查用户是否至少有一个相关权限
+    if (item.permission && !hasAnyPerm(item.permission)) {
+      continue; // ← 无权限，不渲染该菜单项
+    }
+
+    const li = document.createElement('li');
+    li.innerHTML = `<a data-page="${item.key}" onclick="navigateTo('${item.key}')">${item.label}</a>`;
+    nav.appendChild(li);
+  }
+}
+
+// ========================
+// 页面导航
+// ========================
+function navigateTo(pageKey) {
+  // 隐藏所有页面
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  // 显示目标页面
+  const page = document.getElementById(`page-${pageKey}`);
+  if (page) page.style.display = 'block';
+
+  // 激活菜单
+  document.querySelectorAll('.nav-menu a').forEach(a => a.classList.remove('active'));
+  const link = document.querySelector(`[data-page="${pageKey}"]`);
+  if (link) link.classList.add('active');
+
+  // 加载页面数据
+  if (pageKey === 'servers') loadServers();
+  if (pageKey === 'deployments') loadDeployments();
+  if (pageKey === 'alerts') loadAlerts();
+  if (pageKey === 'permissions') loadMyPermissions();
+}
+
+// ========================
+// 服务器管理 — 第二层控制：按钮显隐
+// ========================
+async function loadServers() {
+  const resp = await fetch('/api/servers', {
+    headers: { 'Authorization': `Bearer ${state.token}` },
+  });
+  const data = await resp.json();
+  const container = document.getElementById('serversTable');
+
+  if (!data.data || data.data.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">🖥️</div><p>暂无服务器</p></div>';
+    return;
+  }
+
+  // 根据权限决定是否渲染操作按钮
+  const canRestart = hasPerm('server', 'restart');
+  const canStop = hasPerm('server', 'stop');
+
+  let html = `<table><thead><tr>
+    <th>ID</th><th>名称</th><th>IP</th><th>状态</th>
+    ${(canRestart || canStop) ? '<th>操作</th>' : ''}
+  </tr></thead><tbody>`;
+
+  for (const s of data.data) {
+    const statusClass = s.status === 'running' ? 'tag-running' : 'tag-stopped';
+    html += `<tr>
+      <td>${s.id}</td>
+      <td><strong>${s.name}</strong></td>
+      <td>${s.ip}</td>
+      <td><span class="tag ${statusClass}">${s.status}</span></td>`;
+
+    if (canRestart || canStop) {
+      html += '<td>';
+      if (canRestart) {
+        html += `<button class="btn btn-success" onclick="doRestart(${s.id})" ${s.status==='running'?'disabled':''}>🔄 重启</button>`;
+      }
+      if (canStop) {
+        html += `<button class="btn btn-danger" onclick="doStop(${s.id})" ${s.status==='stopped'?'disabled':''}>⏹️ 停止</button>`;
+      }
+      if (!canRestart && !canStop) {
+        html += '<span class="no-perm-tip">无操作权限</span>';
+      }
+      html += '</td>';
+    }
+
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+async function doRestart(id) {
+  await apiCall('POST', `/api/servers/${id}/restart`);
+  loadServers();
+}
+
+async function doStop(id) {
+  await apiCall('POST', `/api/servers/${id}/stop`);
+  loadServers();
+}
+
+// ========================
+// 发布管理
+// ========================
+async function loadDeployments() {
+  const resp = await fetch('/api/deployments', {
+    headers: { 'Authorization': `Bearer ${state.token}` },
+  });
+  const data = await resp.json();
+  const container = document.getElementById('deploymentsTable');
+
+  // 按钮显隐
+  const canExecute = hasPerm('deployment', 'execute');
+  const canRollback = hasPerm('deployment', 'rollback');
+  document.getElementById('btnCreateDeploy').style.display = canExecute ? '' : 'none';
+
+  if (!data.data || data.data.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>暂无发布记录</p></div>';
+    return;
+  }
+
+  let html = `<table><thead><tr>
+    <th>ID</th><th>项目</th><th>版本</th><th>状态</th>
+    ${(canRollback) ? '<th>操作</th>' : ''}
+  </tr></thead><tbody>`;
+
+  for (const d of data.data) {
+    html += `<tr>
+      <td>${d.id}</td>
+      <td><strong>${d.project}</strong></td>
+      <td>${d.version}</td>
+      <td><span class="tag tag-${d.status}">${d.status}</span></td>`;
+    if (canRollback) {
+      html += `<td><button class="btn btn-warning" onclick="doRollback(${d.id})" ${d.status==='rolled_back'?'disabled':''}>↩️ 回滚</button></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function showDeployDialog() {
+  document.getElementById('deployDialog').style.display = 'block';
+}
+
+async function executeDeploy() {
+  const project = document.getElementById('deployProject').value.trim();
+  const version = document.getElementById('deployVersion').value.trim();
+  if (!project || !version) return showToast('请填写项目名和版本号', 'error');
+
+  await apiCall('POST', '/api/deployments', { project, version });
+  document.getElementById('deployDialog').style.display = 'none';
+  document.getElementById('deployProject').value = '';
+  document.getElementById('deployVersion').value = '';
+  loadDeployments();
+}
+
+async function doRollback(id) {
+  await apiCall('POST', `/api/deployments/${id}/rollback`);
+  loadDeployments();
+}
+
+// ========================
+// 告警管理
+// ========================
+async function loadAlerts() {
+  const resp = await fetch('/api/alerts', {
+    headers: { 'Authorization': `Bearer ${state.token}` },
+  });
+  const data = await resp.json();
+  const container = document.getElementById('alertsTable');
+  const canAck = hasPerm('alert', 'ack');
+
+  if (!data.data || data.data.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">🔔</div><p>暂无告警</p></div>';
+    return;
+  }
+
+  let html = `<table><thead><tr>
+    <th>ID</th><th>级别</th><th>内容</th><th>状态</th>
+    ${canAck ? '<th>操作</th>' : ''}
+  </tr></thead><tbody>`;
+
+  for (const a of data.data) {
+    const levelTag = a.level === 'critical' ? 'tag-stopped' : 'tag-pending';
+    html += `<tr>
+      <td>${a.id}</td>
+      <td><span class="tag ${levelTag}">${a.level}</span></td>
+      <td>${a.message}</td>
+      <td>${a.acked ? '✅ 已确认' : '⏳ 待处理'}</td>`;
+    if (canAck) {
+      html += `<td><button class="btn btn-default" onclick="doAck(${a.id})" ${a.acked?'disabled':''}>✅ 确认</button></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+async function doAck(id) {
+  await apiCall('POST', `/api/alerts/${id}/ack`);
+  loadAlerts();
+}
+
+// ========================
+// 我的权限
+// ========================
+function loadMyPermissions() {
+  const container = document.getElementById('myPermissions');
+  const perms = state.permissions;
+  const keys = Object.keys(perms);
+
+  if (keys.length === 0) {
+    container.innerHTML = '<div class="empty-state"><p>暂无权限数据</p></div>';
+    return;
+  }
+
+  let html = '';
+  for (const resource of keys) {
+    html += `<div style="margin-bottom:12px;">
+      <strong style="font-family:monospace;">${resource}</strong> → `;
+    for (const action of perms[resource]) {
+      html += `<span class="perm-badge">${action}</span> `;
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ========================
+// 通用 API 调用 + Token 自动刷新
+// ========================
+async function apiCall(method, path, body = null) {
+  const opts = {
+    method,
+    headers: { 'Authorization': `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  let resp = await fetch(path, opts);
+
+  // Token 过期，尝试刷新
+  if (resp.status === 401 && state.refreshToken) {
+    const refreshResp = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: state.refreshToken }),
+    });
+    const refreshData = await refreshResp.json();
+    if (refreshData.code === 0) {
+      state.token = refreshData.data.token;
+      state.refreshToken = refreshData.data.refresh_token;
+      localStorage.setItem('token', state.token);
+      localStorage.setItem('refresh_token', state.refreshToken);
+      // 重试原请求
+      opts.headers['Authorization'] = `Bearer ${state.token}`;
+      resp = await fetch(path, opts);
+    } else {
+      handleLogout();
+      throw new Error('登录已过期');
+    }
+  }
+
+  const data = await resp.json();
+  if (resp.ok && data.code === 0) {
+    showToast(data.message || '操作成功', 'success');
+  } else {
+    showToast(data.message || '操作失败', 'error');
+  }
+  return data;
+}
+
+// ========================
+// 登出
+// ========================
+function handleLogout() {
+  localStorage.clear();
+  state.token = null;
+  state.refreshToken = null;
+  state.permissions = {};
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('appPage').style.display = 'none';
+  document.getElementById('loginAccount').value = '';
+  document.getElementById('loginPassword').value = '';
+}
+
+// ========================
+// Toast
+// ========================
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast toast-${type} show`;
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ========================
+// 初始化：检查是否已登录
+// ========================
+(function init() {
+  const savedToken = localStorage.getItem('token');
+  const savedUsername = localStorage.getItem('username');
+  if (savedToken && savedUsername) {
+    state.token = savedToken;
+    state.refreshToken = localStorage.getItem('refresh_token');
+    state.username = savedUsername;
+    const cachedPerms = localStorage.getItem('permissions');
+    if (cachedPerms) state.permissions = JSON.parse(cachedPerms);
+
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('appPage').style.display = 'flex';
+    document.getElementById('sidebarUsername').textContent = state.username;
+
+    loadPermissions().then(() => {
+      renderMenu();
+      navigateTo('servers');
+    });
+  }
+})();
+
+// 回车登录
+document.getElementById('loginPassword').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') handleLogin();
+});
+</script>
+</body>
+</html>

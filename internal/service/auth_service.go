@@ -19,7 +19,15 @@ func NewAuthService(userRepo *repository.UserRepo) *AuthService {
 	return &AuthService{userRepo: userRepo}
 }
 
-func (s *AuthService) Login(req *model.LoginRequest) (string, *model.User, error) {
+// LoginResult 登录返回结果
+type LoginResult struct {
+	Token        string
+	RefreshToken string
+	ExpiresIn    int64 // Access Token 过期时间（秒）
+	User         *model.User
+}
+
+func (s *AuthService) Login(req *model.LoginRequest) (*LoginResult, error) {
 	// 优先按用户名查找，若未找到则尝试按邮箱查找
 	user, err := s.userRepo.FindByUsername(req.Account)
 	if err != nil {
@@ -28,29 +36,39 @@ func (s *AuthService) Login(req *model.LoginRequest) (string, *model.User, error
 			user, err = s.userRepo.FindByEmail(req.Account)
 			if err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
-					return "", nil, errors.New("用户名或密码错误")
+					return nil, errors.New("用户名或密码错误")
 				}
-				return "", nil, err
+				return nil, err
 			}
 		} else {
-			return "", nil, err
+			return nil, err
 		}
 	}
 
 	if user.Status == 0 {
-		return "", nil, errors.New("用户已被禁用")
+		return nil, errors.New("用户已被禁用")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return "", nil, errors.New("用户名或密码错误")
+		return nil, errors.New("用户名或密码错误")
 	}
 
 	token, err := jwtpkg.Generate(user.ID, user.Username)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
-	return token, user, nil
+	refreshToken, err := jwtpkg.GenerateRefreshToken(user.ID, user.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LoginResult{
+		Token:        token,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int64(jwtpkg.GetAccessTokenExpireHour() * 3600),
+		User:         user,
+	}, nil
 }
 
 func (s *AuthService) HashPassword(password string) (string, error) {

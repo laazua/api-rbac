@@ -15,6 +15,7 @@ import (
 	_ "api-rbac/docs"
 
 	"api-rbac/config"
+	"api-rbac/internal/cache"
 	"api-rbac/internal/handler"
 	"api-rbac/internal/model"
 	"api-rbac/internal/repository"
@@ -23,6 +24,7 @@ import (
 	jwtpkg "api-rbac/pkg/jwt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 	"gorm.io/driver/mysql"
@@ -63,7 +65,7 @@ func main() {
 	gin.SetMode(cfg.Server.Mode)
 
 	// 初始化 JWT
-	jwtpkg.Init(cfg.JWT.Secret, cfg.JWT.ExpireHour)
+	jwtpkg.Init(cfg.JWT.Secret, cfg.JWT.ExpireHour, cfg.JWT.RefreshExpireDay)
 
 	// 连接数据库
 	dbLogger := logger.Default.LogMode(logger.Info)
@@ -78,11 +80,27 @@ func main() {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
 
+	// 初始化 Redis（可选，连接失败仅日志警告不退出）
+	var permCache *cache.PermissionCache
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr(),
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		PoolSize: cfg.Redis.PoolSize,
+	})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Printf("⚠️  Redis 连接失败 (%v)，权限缓存已禁用，将直接查询数据库", err)
+	} else {
+		permCache = cache.NewPermissionCache(rdb, 5*time.Minute)
+		log.Println("✅ Redis 连接成功，权限缓存已启用")
+	}
+
 	// 自动迁移
 	if err := db.AutoMigrate(
 		&model.User{},
 		&model.Role{},
 		&model.Permission{},
+		&model.ServiceAccount{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -96,22 +114,30 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	roleRepo := repository.NewRoleRepo(db)
 	permRepo := repository.NewPermissionRepo(db)
+	saRepo := repository.NewServiceAccountRepo(db)
 
 	// 初始化 Service
 	authService := service.NewAuthService(userRepo)
-	permCheckService := service.NewPermissionCheckService(userRepo)
-	userService := service.NewUserService(userRepo, roleRepo)
-	roleService := service.NewRoleService(roleRepo, permRepo)
+	permCheckService := service.NewPermissionCheckService(userRepo, permCache)
+	userService := service.NewUserService(userRepo, roleRepo, permCache)
+	roleService := service.NewRoleService(roleRepo, permRepo, permCache)
 	permService := service.NewPermissionService(permRepo)
+	saService := service.NewServiceAccountService(saRepo)
 
 	// 初始化 Handler
 	authH := handler.NewAuthHandler(authService, permCheckService)
 	userH := handler.NewUserHandler(userService)
 	roleH := handler.NewRoleHandler(roleService)
 	permH := handler.NewPermissionHandler(permService)
+	saH := handler.NewServiceAccountHandler(saService)
+
+	// 初始化默认 Service Account (首次运行)
+	if err := initDefaultServiceAccount(saService); err != nil {
+		log.Printf("⚠️  默认服务账号初始化失败: %v", err)
+	}
 
 	// 设置路由
-	r := router.Setup(authH, userH, roleH, permH, cfg, permCheckService)
+	r := router.Setup(authH, userH, roleH, permH, saH, cfg, permCheckService, saRepo)
 
 	// 创建 HTTP Server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -269,4 +295,34 @@ func readPasswordFromTerminal() (string, error) {
 	}
 
 	return "", fmt.Errorf("超过最大重试次数")
+}
+
+// initDefaultServiceAccount 首次运行时创建一个默认服务账号
+func initDefaultServiceAccount(saService *service.ServiceAccountService) error {
+	// 尝试列表查询来检测是否已有服务账号
+	_, total, err := saService.List(&model.ListServiceAccountRequest{Page: 1, PageSize: 1})
+	if err != nil {
+		return fmt.Errorf("查询服务账号失败: %w", err)
+	}
+
+	if total > 0 {
+		log.Println("[初始化] 服务账号已存在，跳过")
+		return nil
+	}
+
+	sa, apiKey, err := saService.Create(&model.CreateServiceAccountRequest{
+		Name:        "default",
+		Description: "默认服务账号，用于服务间 API 调用",
+	})
+	if err != nil {
+		return fmt.Errorf("创建默认服务账号失败: %w", err)
+	}
+
+	log.Println("========================================")
+	log.Println("  ✅ 默认服务账号已创建")
+	log.Printf("     Name: %s", sa.Name)
+	log.Printf("     API Key: %s", apiKey)
+	log.Println("     请妥善保管 API Key，此信息仅显示一次")
+	log.Println("========================================")
+	return nil
 }

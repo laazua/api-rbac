@@ -92,15 +92,16 @@ http://localhost:8087/swagger/index.html
 │  业务系统 (任意语言)    │          │    RBAC 服务 (Go)      │
 │                       │  HTTP    │                       │
 │  ┌─────────────────┐  │────────→ │  POST /auth/login     │
-│  │ 登录页面         │  │  JWT     │  POST /auth/verify    │
-│  └─────────────────┘  │  Token   │  POST /auth/check     │
-│                       │←─────────│                       │
-│  ┌─────────────────┐  │          │  CRUD /users          │
-│  │ 业务接口          │  │──Token──→│  CRUD /roles          │
-│  │ 收到请求时调用    │  │  ←allowed│  CRUD /permissions    │
-│  │ RBAC 权限检查    │  │          │                       │
-│  └─────────────────┘  │          │                       │
-└───────────────────────┘          └───────────────────────┘
+│  │ 登录页面         │  │  JWT     │  POST /auth/refresh   │
+│  └─────────────────┘  │  Token   │  POST /auth/introspect│
+│                       │←─────────│  POST /auth/check     │
+│  ┌─────────────────┐  │          │  POST /auth/batch-check│
+│  │ 业务接口          │  │──Token──→│                       │
+│  │ 收到请求时调用    │  │  ←allowed│  CRUD /users          │
+│  │ RBAC 权限检查    │  │          │  CRUD /roles          │
+│  └─────────────────┘  │          │  CRUD /permissions    │
+└───────────────────────┘          │  CRUD /service-accounts│
+                                   └───────────────────────┘
 ```
 
 ### 2.2 集成流程
@@ -108,53 +109,60 @@ http://localhost:8087/swagger/index.html
 业务系统集成 RBAC 只需三步：
 
 ```
-1. 用户登录 → 调 POST /api/v1/auth/login → 拿到 JWT Token
-2. 业务接口收到请求 → 调 POST /api/v1/auth/check → 判断 allowed
-3. (可选) 调 POST /api/v1/auth/verify → 校验 Token 是否过期
+1. 用户登录 → 调 POST /api/v1/auth/login → 拿到 JWT Token + Refresh Token
+2. 业务接口收到请求 → 调 POST /api/v1/auth/check 或 /auth/batch-check → 判断 allowed
+3. (可选) 调 POST /api/v1/auth/introspect → 一步完成 Token 验证 + 权限检查
+4. Token 过期 → 调 POST /api/v1/auth/refresh → 获取新 Token
 ```
 
-### 2.3 伪代码示例
+### 2.3 推荐：使用 Token 自省接口
+
+外部服务推荐使用 `/auth/introspect` 接口，一次调用完成 Token 验证 + 权限检查：
 
 ```python
 import requests
 
 RBAC_URL = "http://rbac-service:8087/api/v1"
 
-def handle_user_request(token, resource, action):
-    """业务系统在收到请求时校验权限"""
-    headers = {"Authorization": f"Bearer {token}"}
-    resp = requests.post(f"{RBAC_URL}/auth/check",
-        json={"resource": resource, "action": action},
-        headers=headers)
-    return resp.json()["data"]["allowed"]
+def check_request(request, resource, action):
+    """外部服务使用 introspect 校验请求"""
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    resp = requests.post(f"{RBAC_URL}/auth/introspect",
+        json={"token": token, "resource": resource, "action": action})
+    data = resp.json()["data"]
+    return data["active"]  # True 表示 Token 有效且有权限
 
-# 用户请求删除文章
-if not handle_user_request(token, "article", "delete"):
+# 业务接口示例
+if not check_request(request, "order", "delete"):
     return {"code": 403, "message": "无权限"}
-# 执行业务逻辑...
 ```
 
-### 2.4 Token 传递方式
+### 2.4 服务间调用（API Key）
 
-所有需要认证的接口统一在 Header 中传递：
+后端服务间调用无需用户 Token，使用 X-API-Key 头部：
+
+```bash
+curl -H "X-API-Key: rbac_sa_xxxx" http://localhost:8087/api/v1/auth/check \
+  -d '{"resource":"user","action":"read"}'
+```
+
+### 2.5 Token 传递方式
+
+所有需要认证的接口在 Header 中传递：
 
 ```
 Authorization: Bearer <JWT_TOKEN>
+# 或服务间调用
+X-API-Key: <SERVICE_ACCOUNT_API_KEY>
 ```
 
 ---
 
 ## 3. Go SDK 使用
 
-如果你的业务系统也是 Go + Gin，可以直接复用本项目的 SDK。
+如果你的业务系统也是 Go + Gin，可以直接复用本项目的 SDK (`pkg/client/`)。
 
-### 3.1 引入 Go SDK
-
-```go
-import "api-rbac/pkg/client"
-```
-
-### 3.2 SDK 调用示例
+### 3.1 SDK 调用示例
 
 ```go
 package main
@@ -169,45 +177,97 @@ func main() {
 
     // 1. 登录
     loginResp, err := c.Login("admin", "admin123")
-    if err != nil {
-        panic(err)
-    }
     token := loginResp.Data.Token
-    fmt.Printf("登录成功, Token: %s\n", token)
+    refreshToken := loginResp.Data.RefreshToken
 
     // 2. 验证 Token
     verifyResp, _ := c.Verify(token)
-    fmt.Printf("用户: %s (ID: %d)\n", verifyResp.Data.Username, verifyResp.Data.UserID)
 
     // 3. 检查权限
     checkResp, _ := c.CheckPermission(token, "user", "delete")
-    fmt.Printf("权限检查结果: %v\n", checkResp.Data.Allowed)
+
+    // 4. 批量检查
+    batchResp, _ := c.BatchCheckPermission(token, []client.CheckItem{
+        {Resource: "user", Action: "read"},
+        {Resource: "user", Action: "delete"},
+    })
+
+    // 5. Token 自省
+    introResp, _ := c.Introspect(token, "order", "read")
+
+    // 6. 刷新 Token
+    refreshResp, _ := c.Refresh(refreshToken)
+    token = refreshResp.Data.Token
 }
 ```
 
-### 3.3 SDK 中间件 (Gin)
+### 3.2 SDK 中间件 (Gin)
 
 ```go
-package main
+r := gin.Default()
+rbacClient := client.NewRBACClient("http://localhost:8087/api/v1")
 
-import (
-    "github.com/gin-gonic/gin"
-    "api-rbac/pkg/client"
-)
-
-func main() {
-    r := gin.Default()
-    rbacClient := client.NewRBACClient("http://localhost:8087/api/v1")
-
-    // 对 /admin/* 路径统一要求 "admin:access" 权限
-    admin := r.Group("/admin")
-    admin.Use(client.PermissionGuard(rbacClient, "admin", "access"))
-    {
-        admin.GET("/dashboard", func(c *gin.Context) { /* ... */ })
-    }
-
-    r.Run(":9090")
+admin := r.Group("/admin")
+admin.Use(client.PermissionGuard(rbacClient, "admin", "access"))
+{
+    admin.GET("/dashboard", func(c *gin.Context) { /* ... */ })
 }
+```
+
+---
+
+## 3b. Python SDK 使用
+
+SDK 文件: `sdk/python/rbac_client.py`
+
+```python
+from rbac_client import RBACClient
+
+client = RBACClient("http://localhost:8087/api/v1")
+
+# 登录
+result = client.login("admin", "password")
+token = result["token"]
+
+# 检查权限
+allowed = client.check_permission(token, "user", "delete")
+
+# 批量检查
+perms = client.batch_check(token, [("user", "read"), ("user", "delete")])
+
+# Token 自省
+info = client.introspect(token, "order", "read")
+
+# 刷新 Token
+new_tokens = client.refresh(result["refresh_token"])
+```
+
+---
+
+## 3c. Node.js SDK 使用
+
+SDK 包: `sdk/nodejs/`
+
+```js
+const { RBACClient, permissionGuard } = require('rbac-client');
+
+const client = new RBACClient('http://localhost:8087/api/v1');
+
+// 登录
+const result = await client.login('admin', 'password');
+const token = result.token;
+
+// 检查权限
+const allowed = await client.checkPermission(token, 'user', 'delete');
+
+// 批量检查
+const perms = await client.batchCheck(token, [['user', 'read'], ['user', 'delete']]);
+
+// Token 自省
+const info = await client.introspect(token, 'order', 'read');
+
+// Express 中间件
+app.delete('/orders/:id', permissionGuard(client, 'order', 'delete'), handler);
 ```
 
 ---
@@ -258,6 +318,8 @@ curl -X POST http://localhost:8087/api/v1/auth/login \
   "message": "success",
   "data": {
     "token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+    "expires_in": 7200,
     "user_id": 1,
     "username": "admin"
   }

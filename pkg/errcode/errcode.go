@@ -39,3 +39,25 @@ func GetMsg(code int) string {
 	}
 	return "未知错误"
 }
+
+// ToHTTPStatus 将业务错误码映射为 HTTP 状态码
+func ToHTTPStatus(code int) int {
+	switch code {
+	case Success:
+		return 200
+	case InvalidParams:
+		return 400
+	case Unauthorized, TokenExpired, TokenInvalid:
+		return 401
+	case Forbidden:
+		return 403
+	case NotFound:
+		return 404
+	case AlreadyExists:
+		return 409
+	case InternalError, DBError:
+		return 500
+	default:
+		return 200
+	}
+}

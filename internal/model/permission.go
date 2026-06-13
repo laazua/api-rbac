@@ -28,6 +28,17 @@ type UpdatePermissionRequest struct {
 	Description string `json:"description" binding:"max=255" example:"允许删除任意用户账号"`
 }
 
+// BatchCheckPermissionRequest 批量权限检查请求
+type BatchCheckPermissionRequest struct {
+	Permissions []BatchCheckPermissionItem `json:"permissions" binding:"required,min=1,max=50"`
+}
+
+// BatchCheckPermissionItem 批量检查中的单个项目
+type BatchCheckPermissionItem struct {
+	Resource string `json:"resource" binding:"required,min=1,max=64"`
+	Action   string `json:"action" binding:"required,min=1,max=64"`
+}
+
 // ListPermissionRequest 权限列表查询
 type ListPermissionRequest struct {
 	Page     int    `form:"page" binding:"omitempty,min=1" example:"1"`

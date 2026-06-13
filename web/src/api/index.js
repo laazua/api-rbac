@@ -35,7 +35,27 @@ request.interceptors.response.use(
     return res
   },
   error => {
-    Message.error('网络错误，请检查服务是否启动')
+    // 处理 HTTP 错误状态码（401/403/404/500 等）
+    if (error.response) {
+      const { status, data } = error.response
+      const message = (data && data.message) || `请求错误 (${status})`
+
+      if (status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('username')
+        localStorage.removeItem('permissions')
+        Message.error('登录已过期，请重新登录')
+        window.location.hash = '#/login'
+      } else if (status === 403) {
+        Message.error('无权限执行此操作')
+      } else if (status === 404) {
+        Message.error('请求的资源不存在')
+      } else {
+        Message.error(message)
+      }
+    } else {
+      Message.error('网络错误，请检查服务是否启动')
+    }
     return Promise.reject(error)
   }
 )

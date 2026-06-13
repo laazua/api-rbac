@@ -27,15 +27,28 @@ func NewRBACClient(baseURL string) *RBACClient {
 	}
 }
 
-// Login 用户登录，返回 JWT Token
+// Login 用户登录，返回 JWT Token 对
 func (c *RBACClient) Login(username, password string) (*LoginResponse, error) {
 	body := map[string]string{
-		"username": username,
+		"account":  username,
 		"password": password,
 	}
 
 	var resp LoginResponse
 	if err := c.post("/auth/login", nil, body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Refresh 使用 Refresh Token 获取新的 Token 对
+func (c *RBACClient) Refresh(refreshToken string) (*RefreshResponse, error) {
+	body := map[string]string{
+		"refresh_token": refreshToken,
+	}
+
+	var resp RefreshResponse
+	if err := c.post("/auth/refresh", nil, body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -65,6 +78,43 @@ func (c *RBACClient) CheckPermission(token, resource, action string) (*Permissio
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// BatchCheckPermission 批量检查用户权限
+func (c *RBACClient) BatchCheckPermission(token string, permissions []CheckItem) (*BatchCheckResponse, error) {
+	headers := map[string]string{"Authorization": "Bearer " + token}
+	body := map[string]interface{}{
+		"permissions": permissions,
+	}
+
+	var resp BatchCheckResponse
+	if err := c.post("/auth/batch-check", headers, body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// Introspect Token 自省：验证 Token + 可选权限检查
+func (c *RBACClient) Introspect(token, resource, action string) (*IntrospectResponse, error) {
+	body := map[string]string{"token": token}
+	if resource != "" {
+		body["resource"] = resource
+	}
+	if action != "" {
+		body["action"] = action
+	}
+
+	var resp IntrospectResponse
+	if err := c.post("/auth/introspect", nil, body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// CheckItem 批量检查的单个权限项
+type CheckItem struct {
+	Resource string `json:"resource"`
+	Action   string `json:"action"`
 }
 
 // post 通用 POST 请求
@@ -109,9 +159,21 @@ type LoginResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    struct {
-		Token    string `json:"token"`
-		UserID   uint   `json:"user_id"`
-		Username string `json:"username"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		UserID       uint   `json:"user_id"`
+		Username     string `json:"username"`
+	} `json:"data"`
+}
+
+type RefreshResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
 	} `json:"data"`
 }
 
@@ -129,5 +191,58 @@ type PermissionCheckResponse struct {
 	Message string `json:"message"`
 	Data    struct {
 		Allowed bool `json:"allowed"`
+	} `json:"data"`
+}
+
+type BatchCheckResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Results map[string]bool `json:"results"`
+	} `json:"data"`
+}
+
+// GetMenu 获取用户全部权限 (用于本地缓存 + 前端菜单)
+func (c *RBACClient) GetMenu(token string) (*MenuResponse, error) {
+	headers := map[string]string{"Authorization": "Bearer " + token}
+	url := c.baseURL + "/auth/menu"
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result MenuResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	return &result, nil
+}
+
+type MenuResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Permissions map[string][]string `json:"permissions"`
+	} `json:"data"`
+}
+
+type IntrospectResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Active   bool   `json:"active"`
+		UserID   uint   `json:"user_id,omitempty"`
+		Username string `json:"username,omitempty"`
 	} `json:"data"`
 }

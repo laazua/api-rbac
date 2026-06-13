@@ -1,18 +1,44 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"api-rbac/internal/repository"
 	jwtpkg "api-rbac/pkg/jwt"
 	"api-rbac/pkg/response"
 	"api-rbac/pkg/errcode"
 )
 
-// AuthRequired JWT 认证中间件，排除登录接口
-func AuthRequired() gin.HandlerFunc {
+// AuthRequired 返回 JWT + API Key 双认证中间件
+// 支持两种认证方式:
+// 1. X-API-Key 头部 — 服务间调用
+// 2. Authorization: Bearer <token> — 用户请求
+func AuthRequired(saRepo *repository.ServiceAccountRepo) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 优先检查 X-API-Key（服务间调用）
+		apiKey := c.GetHeader("X-API-Key")
+		if apiKey != "" {
+			sa, err := saRepo.FindByApiKeyHash(hashApiKey(apiKey))
+			if err != nil {
+				response.ErrorWithMsg(c, errcode.Unauthorized, "无效的API Key")
+				c.Abort()
+				return
+			}
+			c.Set("auth_type", "apikey")
+			c.Set("service_account_id", sa.ID)
+			c.Set("service_account_name", sa.Name)
+			// 服务账号视为已认证，user_id 设为 0（超级管理员级别）
+			c.Set("user_id", uint(0))
+			c.Set("username", "sa:"+sa.Name)
+			c.Next()
+			return
+		}
+
+		// Bearer JWT 认证
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			response.Error(c, errcode.Unauthorized)
@@ -38,8 +64,15 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
+		c.Set("auth_type", "jwt")
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Next()
 	}
+}
+
+// hashApiKey 对 API Key 做 SHA256 哈希，与服务账号表中存储的哈希比对
+func hashApiKey(key string) string {
+	h := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(h[:])
 }

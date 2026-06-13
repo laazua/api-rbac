@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"errors"
 
 	"gorm.io/gorm"
 
+	"api-rbac/internal/cache"
 	"api-rbac/internal/model"
 	"api-rbac/internal/repository"
 )
@@ -12,10 +14,11 @@ import (
 type RoleService struct {
 	roleRepo       *repository.RoleRepo
 	permissionRepo *repository.PermissionRepo
+	cache          *cache.PermissionCache
 }
 
-func NewRoleService(roleRepo *repository.RoleRepo, permissionRepo *repository.PermissionRepo) *RoleService {
-	return &RoleService{roleRepo: roleRepo, permissionRepo: permissionRepo}
+func NewRoleService(roleRepo *repository.RoleRepo, permissionRepo *repository.PermissionRepo, cache *cache.PermissionCache) *RoleService {
+	return &RoleService{roleRepo: roleRepo, permissionRepo: permissionRepo, cache: cache}
 }
 
 func (s *RoleService) Create(req *model.CreateRoleRequest) (*model.Role, error) {
@@ -106,7 +109,13 @@ func (s *RoleService) AssignPermissions(id uint, permIDs []uint) error {
 		return err
 	}
 
-	return s.roleRepo.AssignPermissions(role, perms)
+	if err := s.roleRepo.AssignPermissions(role, perms); err != nil {
+		return err
+	}
+
+	// 权限变更后，失效所有拥有该角色的用户的缓存
+	s.invalidateCacheForRole(id)
+	return nil
 }
 
 func (s *RoleService) RemovePermission(id, permID uint) error {
@@ -117,5 +126,23 @@ func (s *RoleService) RemovePermission(id, permID uint) error {
 		}
 		return err
 	}
-	return s.roleRepo.RemovePermission(id, permID)
+
+	if err := s.roleRepo.RemovePermission(id, permID); err != nil {
+		return err
+	}
+
+	// 权限变更后，失效所有拥有该角色的用户的缓存
+	s.invalidateCacheForRole(id)
+	return nil
+}
+
+func (s *RoleService) invalidateCacheForRole(roleID uint) {
+	if s.cache == nil {
+		return
+	}
+	userIDs, err := s.roleRepo.FindUserIDsByRoleID(roleID)
+	if err != nil {
+		return
+	}
+	_ = s.cache.InvalidateUsers(context.Background(), userIDs)
 }

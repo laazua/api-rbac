@@ -8,6 +8,7 @@ import (
 	"api-rbac/config"
 	"api-rbac/internal/handler"
 	"api-rbac/internal/middleware"
+	"api-rbac/internal/repository"
 	"api-rbac/internal/service"
 )
 
@@ -16,8 +17,10 @@ func Setup(
 	userH *handler.UserHandler,
 	roleH *handler.RoleHandler,
 	permH *handler.PermissionHandler,
+	saH *handler.ServiceAccountHandler,
 	cfg *config.Config,
 	permCheckSvc *service.PermissionCheckService,
+	saRepo *repository.ServiceAccountRepo,
 ) *gin.Engine {
 	r := gin.Default()
 
@@ -39,16 +42,19 @@ func Setup(
 		auth := api.Group("/auth")
 		{
 			auth.POST("/login", authH.Login)
+			auth.POST("/refresh", authH.Refresh)
+			auth.POST("/introspect", authH.Introspect)
 		}
 
 		// 以下接口需要认证
 		authed := api.Group("")
-		authed.Use(middleware.AuthRequired())
+		authed.Use(middleware.AuthRequired(saRepo))
 		{
 			// 登出 & Token验证 & 权限检查 & 菜单
 			authed.POST("/auth/logout", authH.Logout)
 			authed.POST("/auth/verify", authH.Verify)
 			authed.POST("/auth/check", authH.Check)
+			authed.POST("/auth/batch-check", authH.BatchCheck)
 			authed.GET("/auth/menu", authH.Menu)
 
 			// ---- 用户管理 ----
@@ -97,6 +103,20 @@ func Setup(
 				permsWrite.POST("", middleware.RequirePermission(permCheckSvc, "permission", "create"), permH.Create)
 				permsWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "permission", "update"), permH.Update)
 				permsWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "permission", "delete"), permH.Delete)
+			}
+
+			// ---- 服务账号管理 ----
+			saRead := authed.Group("/service-accounts")
+			saRead.Use(middleware.RequirePermission(permCheckSvc, "service_account", "read"))
+			{
+				saRead.GET("", saH.List)
+				saRead.GET("/:id", saH.GetByID)
+			}
+			saWrite := authed.Group("/service-accounts")
+			{
+				saWrite.POST("", middleware.RequirePermission(permCheckSvc, "service_account", "create"), saH.Create)
+				saWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "service_account", "update"), saH.Update)
+				saWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "service_account", "delete"), saH.Delete)
 			}
 		}
 	}

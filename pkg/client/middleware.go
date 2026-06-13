@@ -32,7 +32,7 @@ func PermissionGuard(rbacClient *RBACClient, resource, action string) gin.Handle
 
 		resp, err := rbacClient.CheckPermission(token, resource, action)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 1005, "message": "权限检查服务不可用"})
+			c.JSON(http.StatusBadGateway, gin.H{"code": 1005, "message": "权限检查服务不可用"})
 			c.Abort()
 			return
 		}

@@ -43,21 +43,21 @@ func SuccessWithPage(c *gin.Context, list interface{}, total int64, page, pageSi
 }
 
 func Error(c *gin.Context, code int) {
-	c.JSON(http.StatusOK, Response{
+	c.JSON(errcode.ToHTTPStatus(code), Response{
 		Code:    code,
 		Message: errcode.GetMsg(code),
 	})
 }
 
 func ErrorWithMsg(c *gin.Context, code int, msg string) {
-	c.JSON(http.StatusOK, Response{
+	c.JSON(errcode.ToHTTPStatus(code), Response{
 		Code:    code,
 		Message: msg,
 	})
 }
 
 func ErrorWithData(c *gin.Context, code int, data interface{}) {
-	c.JSON(http.StatusOK, Response{
+	c.JSON(errcode.ToHTTPStatus(code), Response{
 		Code:    code,
 		Message: errcode.GetMsg(code),
 		Data:    data,

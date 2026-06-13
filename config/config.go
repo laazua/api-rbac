@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 	DB     DBConfig     `mapstructure:"db"`
+	Redis  RedisConfig  `mapstructure:"redis"`
 	JWT    JWTConfig    `mapstructure:"jwt"`
 	CORS   CORSConfig   `mapstructure:"cors"`
 }
@@ -28,14 +29,27 @@ type DBConfig struct {
 	Charset  string `mapstructure:"charset"`
 }
 
+type RedisConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+	PoolSize int    `mapstructure:"pool_size"`
+}
+
+func (r RedisConfig) Addr() string {
+	return fmt.Sprintf("%s:%d", r.Host, r.Port)
+}
+
 func (d DBConfig) DSN() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
 		d.User, d.Password, d.Host, d.Port, d.DBName, d.Charset)
 }
 
 type JWTConfig struct {
-	Secret     string `mapstructure:"secret"`
-	ExpireHour int    `mapstructure:"expire_hour"`
+	Secret           string `mapstructure:"secret"`
+	ExpireHour       int    `mapstructure:"expire_hour"`
+	RefreshExpireDay int    `mapstructure:"refresh_expire_day"`
 }
 
 type CORSConfig struct {

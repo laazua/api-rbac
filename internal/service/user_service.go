@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"errors"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"api-rbac/internal/cache"
 	"api-rbac/internal/model"
 	"api-rbac/internal/repository"
 )
@@ -13,10 +15,11 @@ import (
 type UserService struct {
 	userRepo *repository.UserRepo
 	roleRepo *repository.RoleRepo
+	cache    *cache.PermissionCache
 }
 
-func NewUserService(userRepo *repository.UserRepo, roleRepo *repository.RoleRepo) *UserService {
-	return &UserService{userRepo: userRepo, roleRepo: roleRepo}
+func NewUserService(userRepo *repository.UserRepo, roleRepo *repository.RoleRepo, cache *cache.PermissionCache) *UserService {
+	return &UserService{userRepo: userRepo, roleRepo: roleRepo, cache: cache}
 }
 
 func (s *UserService) Create(req *model.CreateUserRequest) (*model.User, error) {
@@ -132,7 +135,13 @@ func (s *UserService) AssignRoles(id uint, roleIDs []uint) error {
 		return err
 	}
 
-	return s.userRepo.AssignRoles(user, roles)
+	if err := s.userRepo.AssignRoles(user, roles); err != nil {
+		return err
+	}
+
+	// 角色变更后失效权限缓存
+	s.invalidateCache(id)
+	return nil
 }
 
 func (s *UserService) RemoveRole(id, roleID uint) error {
@@ -143,5 +152,18 @@ func (s *UserService) RemoveRole(id, roleID uint) error {
 		}
 		return err
 	}
-	return s.userRepo.RemoveRole(id, roleID)
+
+	if err := s.userRepo.RemoveRole(id, roleID); err != nil {
+		return err
+	}
+
+	// 角色变更后失效权限缓存
+	s.invalidateCache(id)
+	return nil
+}
+
+func (s *UserService) invalidateCache(userID uint) {
+	if s.cache != nil {
+		_ = s.cache.InvalidateUser(context.Background(), userID)
+	}
 }

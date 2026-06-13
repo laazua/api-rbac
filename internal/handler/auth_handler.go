@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
+	jwtpkg "api-rbac/pkg/jwt"
 	"api-rbac/internal/model"
 	"api-rbac/internal/service"
 	"api-rbac/pkg/errcode"
@@ -36,16 +37,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.authService.Login(&req)
+	result, err := h.authService.Login(&req)
 	if err != nil {
 		response.ErrorWithMsg(c, errcode.PasswordWrong, err.Error())
 		return
 	}
 
 	response.Success(c, gin.H{
-		"token":    token,
-		"user_id":  user.ID,
-		"username": user.Username,
+		"token":         result.Token,
+		"refresh_token": result.RefreshToken,
+		"expires_in":    result.ExpiresIn,
+		"user_id":       result.User.ID,
+		"username":      result.User.Username,
 	})
 }
 
@@ -60,6 +63,49 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	// 无状态 JWT，客户端只需丢弃 Token 即可
 	response.Success(c, nil)
+}
+
+// Refresh 刷新 Token
+// @Summary      刷新 Token
+// @Description  使用 Refresh Token 获取新的 Access Token 和 Refresh Token
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Param        request body model.RefreshTokenRequest true "刷新参数"
+// @Success      200  {object}  response.Response{data=object{token=string,refresh_token=string,expires_in=int}}  "刷新成功"
+// @Failure      401  {object}  response.Response  "Refresh Token 无效或过期"
+// @Router       /auth/refresh [post]
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req model.RefreshTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorWithMsg(c, errcode.InvalidParams, err.Error())
+		return
+	}
+
+	claims, err := jwtpkg.ParseRefreshToken(req.RefreshToken)
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.TokenInvalid, "刷新令牌无效或已过期")
+		return
+	}
+
+	// 生成新的 Token 对
+	newToken, err := jwtpkg.Generate(claims.UserID, claims.Username)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+
+	newRefreshToken, err := jwtpkg.GenerateRefreshToken(claims.UserID, claims.Username)
+	if err != nil {
+		response.Error(c, errcode.InternalError)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"token":         newToken,
+		"refresh_token": newRefreshToken,
+		"expires_in":    int64(jwtpkg.GetAccessTokenExpireHour() * 3600),
+	})
 }
 
 // Verify 验证Token
@@ -145,4 +191,82 @@ func (h *AuthHandler) Check(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"allowed": true})
+}
+
+// Introspect Token 自省，外部服务一次调用即可完成 Token 验证 + 权限检查
+// @Summary      Token 自省
+// @Description  验证 Token 有效性，可选同时检查指定资源和操作的权限。供外部业务服务集成使用。
+// @Tags         认证
+// @Accept       json
+// @Produce      json
+// @Param        request body model.IntrospectRequest true "自省参数"
+// @Success      200  {object}  response.Response{data=model.IntrospectResponse}  "查询成功"
+// @Router       /auth/introspect [post]
+func (h *AuthHandler) Introspect(c *gin.Context) {
+	var req model.IntrospectRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorWithMsg(c, errcode.InvalidParams, err.Error())
+		return
+	}
+
+	// 解析 Token
+	claims, err := jwtpkg.Parse(req.Token)
+	if err != nil {
+		// Token 无效或过期，返回 inactive
+		response.Success(c, model.IntrospectResponse{Active: false})
+		return
+	}
+
+	resp := model.IntrospectResponse{
+		Active:   true,
+		UserID:   claims.UserID,
+		Username: claims.Username,
+	}
+
+	// 如果请求中包含 resource 和 action，则同时检查权限
+	if req.Resource != "" && req.Action != "" {
+		allowed, err := h.permService.CheckPermission(claims.UserID, req.Resource, req.Action)
+		if err != nil || !allowed {
+			resp.Active = false
+		}
+	}
+
+	response.Success(c, resp)
+}
+
+// BatchCheck 批量权限检查
+// @Summary      批量权限检查
+// @Description  一次性检查多个权限，返回每个 permission 对应的结果
+// @Tags         认证
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        request body model.BatchCheckPermissionRequest true "批量检查参数"
+// @Success      200  {object}  response.Response{data=object{results=object}}  "检查完成"
+// @Router       /auth/batch-check [post]
+func (h *AuthHandler) BatchCheck(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		response.Error(c, errcode.Unauthorized)
+		return
+	}
+
+	var req model.BatchCheckPermissionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorWithMsg(c, errcode.InvalidParams, err.Error())
+		return
+	}
+
+	items := make([]service.BatchCheckItem, len(req.Permissions))
+	for i, p := range req.Permissions {
+		items[i] = service.BatchCheckItem{Resource: p.Resource, Action: p.Action}
+	}
+
+	results, err := h.permService.BatchCheckPermission(userID.(uint), items)
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{"results": results})
 }

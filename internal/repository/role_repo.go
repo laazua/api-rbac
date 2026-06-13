@@ -73,6 +73,13 @@ func (r *RoleRepo) FindByIDs(ids []uint) ([]model.Role, error) {
 	return roles, err
 }
 
+// FindUserIDsByRoleID 查询拥有该角色的所有用户 ID 列表
+func (r *RoleRepo) FindUserIDsByRoleID(roleID uint) ([]uint, error) {
+	var userIDs []uint
+	err := r.db.Table("user_roles").Where("role_id = ?", roleID).Pluck("user_id", &userIDs).Error
+	return userIDs, err
+}
+
 func (r *RoleRepo) ExistsByName(name string, excludeID ...uint) (bool, error) {
 	var count int64
 	query := r.db.Model(&model.Role{}).Where("name = ?", name)

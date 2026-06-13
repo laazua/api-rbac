@@ -12,7 +12,15 @@ db:
 
 jwt:
   secret: "change-me-in-production"
-  expire_hour: 24
+  expire_hour: 2
+  refresh_expire_day: 7
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
 
 cors:
   allow_origins:

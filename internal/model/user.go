@@ -49,6 +49,11 @@ type CheckPermissionRequest struct {
 	Action   string `json:"action" binding:"required,min=1,max=64" example:"delete"`
 }
 
+// RefreshTokenRequest 刷新 Token 请求
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
 // ListUserRequest 用户列表查询
 type ListUserRequest struct {
 	Page     int    `form:"page" binding:"omitempty,min=1" example:"1"`
