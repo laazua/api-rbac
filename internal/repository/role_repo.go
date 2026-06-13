@@ -33,7 +33,8 @@ func (r *RoleRepo) List(page, pageSize int, keyword string) ([]model.Role, int64
 
 	query := r.db.Model(&model.Role{})
 	if keyword != "" {
-		query = query.Where("name LIKE ? OR description LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		escaped := escapeLike(keyword)
+		query = query.Where("name LIKE ? OR description LIKE ?", "%"+escaped+"%", "%"+escaped+"%")
 	}
 
 	if err := query.Count(&total).Error; err != nil {

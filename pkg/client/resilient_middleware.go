@@ -17,26 +17,29 @@ const (
 	FailModeCache                 // 使用本地缓存 (推荐, 高可用)
 )
 
+// 全局共享的缓存和熔断器状态 (所有 ResilientGuard 共用)
+var (
+	resilientCacheStore     = make(map[string]cacheEntry)
+	resilientMu             sync.Mutex
+	resilientFailCount      int
+	resilientCircuitOpen    bool
+	resilientCircuitSince   time.Time
+)
+
 // ResilientGuard 返回一个带韧性能力的 Gin 权限校验中间件。
 //
+// 所有 ResilientGuard 实例共享同一个本地缓存和熔断器。
 // 特性:
-//   - RBAC 正常 → 远程校验
+//   - RBAC 正常 → 远程校验 + 异步更新缓存
 //   - RBAC 不可达 → 根据 failMode: DENY=拒绝 / CACHE=查本地缓存
-//   - 熔断保护: 连续失败超阈值后直接走缓存，避免超时堆积
-//   - 自动恢复: 熔断后定期探测，恢复正常自动切回
+//   - 熔断保护: 连续失败 5 次后走缓存, 避免超时堆积
+//   - 自动恢复: 熔断 30s 后探测, 正常则自动切回
 //
 // 用法:
 //
 //	r.Use(ResilientGuard(rbacClient, FailModeCache, 300, "user", "delete"))
 func ResilientGuard(client *RBACClient, failMode FailMode, cacheTTLSec int, resource, action string) gin.HandlerFunc {
-	rc := &resilientCache{
-		client:     client,
-		failMode:   failMode,
-		cacheTTL:   time.Duration(cacheTTLSec) * time.Second,
-		permCache:  make(map[string]cacheEntry),
-		cbMaxFails: 5,
-		cbRecovery: 30 * time.Second,
-	}
+	cacheTTL := time.Duration(cacheTTLSec) * time.Second
 
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -55,15 +58,14 @@ func ResilientGuard(client *RBACClient, failMode FailMode, cacheTTLSec int, reso
 
 		token := parts[1]
 
-		// 熔断状态下直接走缓存, 避免每次请求超时等待
-		if rc.isCircuitOpen() {
+		// 熔断状态下直接走缓存
+		if isGlobalCircuitOpen() {
 			if failMode == FailModeDeny {
 				c.JSON(http.StatusBadGateway, gin.H{"code": 1005, "message": "权限服务不可用(已熔断)"})
 				c.Abort()
 				return
 			}
-			// FailModeCache: 用本地缓存
-			if rc.checkFromCache(token, resource, action) {
+			if globalCheckFromCache(token, resource, action, cacheTTL) {
 				c.Next()
 				return
 			}
@@ -74,9 +76,8 @@ func ResilientGuard(client *RBACClient, failMode FailMode, cacheTTLSec int, reso
 
 		resp, err := client.CheckPermission(token, resource, action)
 		if err == nil && resp.Code == 0 {
-			rc.onSuccess()
-			// 异步加载用户完整权限到本地缓存
-			go rc.tryPopulateCache(token)
+			globalOnSuccess()
+			go globalPopulateCache(client, token)
 			if resp.Data.Allowed {
 				c.Next()
 				return
@@ -87,7 +88,7 @@ func ResilientGuard(client *RBACClient, failMode FailMode, cacheTTLSec int, reso
 		}
 
 		// RBAC 不可达
-		rc.onFailure()
+		globalOnFailure()
 
 		if failMode == FailModeDeny {
 			c.JSON(http.StatusBadGateway, gin.H{"code": 1005, "message": "权限服务不可用"})
@@ -95,95 +96,77 @@ func ResilientGuard(client *RBACClient, failMode FailMode, cacheTTLSec int, reso
 			return
 		}
 
-		// FailModeCache: 降级到本地缓存
-		if rc.checkFromCache(token, resource, action) {
+		if globalCheckFromCache(token, resource, action, cacheTTL) {
 			c.Next()
 			return
 		}
-		// 缓存中也无 → 安全拒绝
 		c.JSON(http.StatusForbidden, gin.H{"code": 1003, "message": "权限服务不可用, 缓存中无权限数据"})
 		c.Abort()
 	}
 }
 
 // ================================================================
-// 韧性缓存实现
+// 全局缓存 + 熔断器
 // ================================================================
 
 type cacheEntry struct {
-	perms     map[string][]string // resource → [action...]
+	perms     map[string][]string
 	timestamp time.Time
 }
 
-type resilientCache struct {
-	client     *RBACClient
-	failMode   FailMode
-	cacheTTL   time.Duration
-	cbMaxFails int
-	cbRecovery time.Duration
-
-	mu            sync.Mutex
-	permCache     map[string]cacheEntry // token → cacheEntry
-	failureCount  int
-	circuitOpen   bool
-	circuitOpened time.Time
-}
-
-func (rc *resilientCache) isCircuitOpen() bool {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	if !rc.circuitOpen {
+func isGlobalCircuitOpen() bool {
+	resilientMu.Lock()
+	defer resilientMu.Unlock()
+	if !resilientCircuitOpen {
 		return false
 	}
-	if time.Since(rc.circuitOpened) > rc.cbRecovery {
-		rc.circuitOpen = false
-		rc.failureCount = 0
+	if time.Since(resilientCircuitSince) > 30*time.Second {
+		resilientCircuitOpen = false
+		resilientFailCount = 0
 		return false
 	}
 	return true
 }
 
-func (rc *resilientCache) onSuccess() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	rc.failureCount = 0
-	rc.circuitOpen = false
+func globalOnSuccess() {
+	resilientMu.Lock()
+	defer resilientMu.Unlock()
+	resilientFailCount = 0
+	resilientCircuitOpen = false
 }
 
-func (rc *resilientCache) onFailure() {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	rc.failureCount++
-	if rc.failureCount >= rc.cbMaxFails {
-		rc.circuitOpen = true
-		rc.circuitOpened = time.Now()
+func globalOnFailure() {
+	resilientMu.Lock()
+	defer resilientMu.Unlock()
+	resilientFailCount++
+	if resilientFailCount >= 5 {
+		resilientCircuitOpen = true
+		resilientCircuitSince = time.Now()
 	}
 }
 
-// tryPopulateCache 异步加载用户完整权限到本地缓存
-func (rc *resilientCache) tryPopulateCache(token string) {
-	menu, err := rc.client.GetMenu(token)
+func globalPopulateCache(client *RBACClient, token string) {
+	menu, err := client.GetMenu(token)
 	if err != nil || menu.Code != 0 {
 		return
 	}
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	rc.permCache[token] = cacheEntry{
+	resilientMu.Lock()
+	defer resilientMu.Unlock()
+	resilientCacheStore[token] = cacheEntry{
 		perms:     menu.Data.Permissions,
 		timestamp: time.Now(),
 	}
 }
 
-func (rc *resilientCache) checkFromCache(token, resource, action string) bool {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
+func globalCheckFromCache(token, resource, action string, ttl time.Duration) bool {
+	resilientMu.Lock()
+	defer resilientMu.Unlock()
 
-	entry, ok := rc.permCache[token]
-	if !ok || time.Since(entry.timestamp) > rc.cacheTTL {
+	entry, ok := resilientCacheStore[token]
+	if !ok || time.Since(entry.timestamp) > ttl {
 		return false
 	}
 
-	// 通配符匹配
 	if actions, ok := entry.perms["*"]; ok {
 		for _, a := range actions {
 			if a == "*" || a == action {

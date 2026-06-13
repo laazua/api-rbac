@@ -20,6 +20,7 @@ Usage:
     allowed = client.check_permission(token, "user", "delete")
 """
 
+import base64
 import json
 import time
 import threading
@@ -107,11 +108,16 @@ class RBACClient:
         return resp["data"]
 
     def verify(self, token: str) -> Dict:
-        return self._call_or_fallback(
-            lambda: self._do_verify(token),
-            fallback_value=None,
-            error_msg="Token 验证失败",
-        )
+        """验证 Token — 始终直连 RBAC，永不降级到缓存"""
+        if self._is_circuit_open():
+            raise RuntimeError("Token 验证不可用: RBAC 服务不可达 (已熔断)")
+        try:
+            result = self._do_verify(token)
+            self._on_success()
+            return result
+        except Exception:
+            self._on_failure()
+            raise
 
     def check_permission(self, token: str, resource: str, action: str) -> bool:
         """检查用户是否有指定权限 (故障时走本地缓存或拒绝)"""
@@ -242,14 +248,19 @@ class RBACClient:
             return perms
 
     def _extract_user_id(self, token: str) -> Optional[int]:
-        """从 JWT token 中提取 user_id (不解码, 用缓存中的 key)"""
-        # 遍历缓存找匹配的 user_id
-        # 生产环境建议用 jwt.decode 解码 payload
-        # 这里用简单方式: token 的最后部分用于缓存 key
-        with self._lock:
-            for uid in self._cache:
-                return uid  # 返回第一个缓存用户 (简化实现)
-        return None
+        """从 JWT payload 中提取 user_id (Base64 解码, 无需验证签名)"""
+        try:
+            # JWT 格式: header.payload.signature
+            parts = token.split(".")
+            if len(parts) < 2:
+                return None
+            # Base64Url 解码 payload
+            payload = parts[1]
+            payload += "=" * (4 - len(payload) % 4)  # 补齐 padding
+            decoded = json.loads(base64.urlsafe_b64decode(payload))
+            return decoded.get("user_id")
+        except Exception:
+            return None
 
     # ---- 熔断器 ----
 

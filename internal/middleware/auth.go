@@ -28,12 +28,11 @@ func AuthRequired(saRepo *repository.ServiceAccountRepo) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
+			// API Key 认证: 仅标记认证方式，不设置 user_id
+			// RequirePermission 中间件检测到 apikey 类型直接放行
 			c.Set("auth_type", "apikey")
 			c.Set("service_account_id", sa.ID)
 			c.Set("service_account_name", sa.Name)
-			// 服务账号视为已认证，user_id 设为 0（超级管理员级别）
-			c.Set("user_id", uint(0))
-			c.Set("username", "sa:"+sa.Name)
 			c.Next()
 			return
 		}

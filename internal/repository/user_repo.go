@@ -1,10 +1,20 @@
 package repository
 
 import (
+	"strings"
+
 	"github.com/laazua/api-rbac/internal/model"
 
 	"gorm.io/gorm"
 )
+
+// escapeLike 转义 SQL LIKE 通配符，防止 LIKE 注入
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
+}
 
 type UserRepo struct {
 	db *gorm.DB
@@ -51,7 +61,8 @@ func (r *UserRepo) List(page, pageSize int, keyword string) ([]model.User, int64
 
 	query := r.db.Model(&model.User{}).Preload("Roles")
 	if keyword != "" {
-		query = query.Where("username LIKE ? OR email LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		escaped := escapeLike(keyword)
+		query = query.Where("username LIKE ? OR email LIKE ?", "%"+escaped+"%", "%"+escaped+"%")
 	}
 
 	if err := query.Count(&total).Error; err != nil {

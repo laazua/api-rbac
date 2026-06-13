@@ -274,16 +274,19 @@ migrations/
   middleware.AuthRequired(saRepo)
        │
        ├─ X-API-Key 头部?
-       │    → 查 service_accounts 表验证 → 设置 service_account_id
+       │    → 查 service_accounts 表 (SHA256 比对)
+       │    → 设置 auth_type="apikey" + service_account_id
+       │    → RequirePermission 检测到 apikey 类型 → 直接放行
        │
        └─ Authorization: Bearer <token>?
-            → 解析 JWT → 设置 user_id, username
+            → 解析 JWT → 安全类型断言 → 设置 user_id, username
        │
        ▼
   (可选) middleware.RequirePermission(permCheckSvc, resource, action)
-       → 调 permCheckService.CheckPermission(userID, resource, action)
+       → apikey 认证? → 直接放行 (受信任内部服务)
+       → JWT 认证? → getUserID(c) 安全提取 → 调 CheckPermission
        → 优先从 Redis 缓存读取, miss 则查 DB
-       → 通配符匹配 → 返回 true/false
+       → 通配符匹配 (*:*, resource:*, *:action) → 返回 true/false
        │
        ▼
   Handler → Service → Repository → DB
@@ -1146,8 +1149,9 @@ SDK 已内置三层防护机制：
 ```
 第一层: 本地权限缓存 (FailMode.CACHE)
   → 登录时预加载用户权限到进程内存
-  → RBAC 正常时，每次成功校验后更新缓存
-  → RBAC 宕机时，查本地缓存匹配权限
+  → RBAC 正常时，每次成功校验后异步更新缓存
+  → 缓存 key = JWT payload 中解码的 user_id (非 token 字符串, 防止跨用户混淆)
+  → Go 中间件: 所有路由共享同一个全局缓存 (避免重复填充)
 
 第二层: 熔断器 (Circuit Breaker)
   → 连续 N 次失败后自动进入熔断状态
@@ -1218,15 +1222,23 @@ if (rbac.checkPermission(login.token(), "server", "restart")) {
 ### 11.5 Go SDK 韧性用法
 
 ```go
-import "api-rbac/pkg/client"
+import "github.com/laazua/api-rbac/pkg/client"
 
 // 使用 ResilientGuard 替代原 PermissionGuard
+// 所有 ResilientGuard 实例共享同一个全局缓存和熔断器
 r.Use(client.ResilientGuard(
     rbacClient,
     client.FailModeCache,  // 故障时用缓存
     300,                    // 缓存 300 秒
     "server", "restart",
 ))
+r.Use(client.ResilientGuard(
+    rbacClient,
+    client.FailModeCache,
+    300,
+    "server", "stop",
+))
+// 以上 2 个路由共享同一个本地缓存 — 第一个成功请求填充缓存后，第二个路由也可命中
 ```
 
 ### 11.6 故障模式选择指南
@@ -1244,10 +1256,14 @@ r.Use(client.ResilientGuard(
 
 ```
 1. 本地缓存中没有该用户数据 → 拒绝 (不猜)
-2. 本地缓存超过 TTL → 拒绝 (不信任过期数据)
-3. FailMode.DENY 模式下 → RBAC 宕机即拒绝
+2. 本地缓存超过 TTL (默认 300s) → 拒绝 (不信任过期数据)
+3. FailMode.DENY 模式下 → RBAC 宕机即拒绝一切
 4. 熔断恢复后的第一次请求 → 必须通过 RBAC 校验 (不自动信任缓存)
-5. 登录接口 → 必须通过 RBAC (不走缓存)
+5. 登录接口 → 必须通过 RBAC (不走缓存, 不降级)
+6. Token 验证接口 → 必须通过 RBAC (不走缓存, 不降级)
+7. 缓存 key = JWT payload 中的 user_id (非 token 字符串, 防跨用户混淆)
+8. Go 中间件: 全局缓存, 所有路由共享, 熔断器全局统一
+9. API Key 认证: RequirePermission 直接放行 (受信任内部服务)
 ```
 
 ---

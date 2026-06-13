@@ -39,8 +39,9 @@ func (r *PermissionRepo) List(page, pageSize int, keyword string) ([]model.Permi
 
 	query := r.db.Model(&model.Permission{})
 	if keyword != "" {
+		escaped := escapeLike(keyword)
 		query = query.Where("name LIKE ? OR resource LIKE ? OR action LIKE ?",
-			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+			"%"+escaped+"%", "%"+escaped+"%", "%"+escaped+"%")
 	}
 
 	if err := query.Count(&total).Error; err != nil {

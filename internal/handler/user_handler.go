@@ -240,8 +240,16 @@ func (h *UserHandler) AssignRoles(c *gin.Context) {
 // @Failure      404  {object}  response.Response  "用户不存在"
 // @Router       /users/{id}/roles/{roleId} [delete]
 func (h *UserHandler) RemoveRole(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	roleID, _ := strconv.ParseUint(c.Param("roleId"), 10, 64)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	roleID, err := strconv.ParseUint(c.Param("roleId"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
 
 	if err := h.userService.RemoveRole(uint(id), uint(roleID)); err != nil {
 		response.ErrorWithMsg(c, errcode.NotFound, err.Error())

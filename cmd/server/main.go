@@ -80,6 +80,15 @@ func main() {
 		log.Fatalf("数据库连接失败: %v", err)
 	}
 
+	// 配置数据库连接池
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("获取数据库实例失败: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
 	// 初始化 Redis（可选，连接失败仅日志警告不退出）
 	var permCache *cache.PermissionCache
 	rdb := redis.NewClient(&redis.Options{

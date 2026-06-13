@@ -10,6 +10,16 @@ import (
 	"github.com/laazua/api-rbac/pkg/response"
 )
 
+// getUserID 安全地从 Gin Context 中提取 user_id (uint)
+func getUserID(c *gin.Context) (uint, bool) {
+	val, exists := c.Get("user_id")
+	if !exists {
+		return 0, false
+	}
+	uid, ok := val.(uint)
+	return uid, ok
+}
+
 type AuthHandler struct {
 	authService  *service.AuthService
 	permService  *service.PermissionCheckService
@@ -140,13 +150,13 @@ func (h *AuthHandler) Verify(c *gin.Context) {
 // @Success      200  {object}  response.Response{data=object{permissions=object}}  "查询成功"
 // @Router       /auth/menu [get]
 func (h *AuthHandler) Menu(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
+	uid, ok := getUserID(c)
+	if !ok {
 		response.Error(c, errcode.Unauthorized)
 		return
 	}
 
-	perms, err := h.permService.GetUserPermissions(userID.(uint))
+	perms, err := h.permService.GetUserPermissions(uid)
 	if err != nil {
 		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
 		return
@@ -167,8 +177,8 @@ func (h *AuthHandler) Menu(c *gin.Context) {
 // @Failure      403  {object}  response.Response{data=object{allowed=bool}}  "无权限"
 // @Router       /auth/check [post]
 func (h *AuthHandler) Check(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
+	uid, ok := getUserID(c)
+	if !ok {
 		response.Error(c, errcode.Unauthorized)
 		return
 	}
@@ -179,7 +189,7 @@ func (h *AuthHandler) Check(c *gin.Context) {
 		return
 	}
 
-	allowed, err := h.permService.CheckPermission(userID.(uint), req.Resource, req.Action)
+	allowed, err := h.permService.CheckPermission(uid, req.Resource, req.Action)
 	if err != nil {
 		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
 		return
@@ -245,8 +255,8 @@ func (h *AuthHandler) Introspect(c *gin.Context) {
 // @Success      200  {object}  response.Response{data=object{results=object}}  "检查完成"
 // @Router       /auth/batch-check [post]
 func (h *AuthHandler) BatchCheck(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
+	uid, ok := getUserID(c)
+	if !ok {
 		response.Error(c, errcode.Unauthorized)
 		return
 	}
@@ -262,7 +272,7 @@ func (h *AuthHandler) BatchCheck(c *gin.Context) {
 		items[i] = service.BatchCheckItem{Resource: p.Resource, Action: p.Action}
 	}
 
-	results, err := h.permService.BatchCheckPermission(userID.(uint), items)
+	results, err := h.permService.BatchCheckPermission(uid, items)
 	if err != nil {
 		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
 		return
