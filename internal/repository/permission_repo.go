@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"api-rbac/internal/model"
+	"github.com/laazua/api-rbac/internal/model"
 
 	"gorm.io/gorm"
 )

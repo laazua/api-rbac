@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"api-rbac/pkg/client"
+	"github.com/laazua/api-rbac/pkg/client"
 )
 
 // ================================================================

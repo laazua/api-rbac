@@ -3,11 +3,11 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	jwtpkg "api-rbac/pkg/jwt"
-	"api-rbac/internal/model"
-	"api-rbac/internal/service"
-	"api-rbac/pkg/errcode"
-	"api-rbac/pkg/response"
+	jwtpkg "github.com/laazua/api-rbac/pkg/jwt"
+	"github.com/laazua/api-rbac/internal/model"
+	"github.com/laazua/api-rbac/internal/service"
+	"github.com/laazua/api-rbac/pkg/errcode"
+	"github.com/laazua/api-rbac/pkg/response"
 )
 
 type AuthHandler struct {

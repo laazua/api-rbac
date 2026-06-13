@@ -3,9 +3,9 @@ package middleware
 import (
 	"github.com/gin-gonic/gin"
 
-	"api-rbac/internal/service"
-	"api-rbac/pkg/errcode"
-	"api-rbac/pkg/response"
+	"github.com/laazua/api-rbac/internal/service"
+	"github.com/laazua/api-rbac/pkg/errcode"
+	"github.com/laazua/api-rbac/pkg/response"
 )
 
 // RequirePermission 返回一个 Gin 中间件，校验当前用户是否拥有指定资源的指定操作权限

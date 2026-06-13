@@ -6,9 +6,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	"api-rbac/internal/model"
-	"api-rbac/internal/repository"
-	jwtpkg "api-rbac/pkg/jwt"
+	"github.com/laazua/api-rbac/internal/model"
+	"github.com/laazua/api-rbac/internal/repository"
+	jwtpkg "github.com/laazua/api-rbac/pkg/jwt"
 )
 
 type AuthService struct {

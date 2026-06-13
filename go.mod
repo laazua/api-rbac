@@ -1,4 +1,4 @@
-module api-rbac
+module github.com/laazua/api-rbac
 
 go 1.26.1
 

@@ -5,10 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"api-rbac/internal/model"
-	"api-rbac/internal/service"
-	"api-rbac/pkg/errcode"
-	"api-rbac/pkg/response"
+	"github.com/laazua/api-rbac/internal/model"
+	"github.com/laazua/api-rbac/internal/service"
+	"github.com/laazua/api-rbac/pkg/errcode"
+	"github.com/laazua/api-rbac/pkg/response"
 )
 
 type RoleHandler struct {

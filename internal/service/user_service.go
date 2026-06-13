@@ -7,9 +7,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
-	"api-rbac/internal/cache"
-	"api-rbac/internal/model"
-	"api-rbac/internal/repository"
+	"github.com/laazua/api-rbac/internal/cache"
+	"github.com/laazua/api-rbac/internal/model"
+	"github.com/laazua/api-rbac/internal/repository"
 )
 
 type UserService struct {

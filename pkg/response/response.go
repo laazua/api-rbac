@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"api-rbac/pkg/errcode"
+	"github.com/laazua/api-rbac/pkg/errcode"
 )
 
 type Response struct {

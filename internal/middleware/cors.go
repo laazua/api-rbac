@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"api-rbac/config"
+	"github.com/laazua/api-rbac/config"
 )
 
 func CORS(cfg config.CORSConfig) gin.HandlerFunc {

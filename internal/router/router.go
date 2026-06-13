@@ -5,11 +5,11 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
-	"api-rbac/config"
-	"api-rbac/internal/handler"
-	"api-rbac/internal/middleware"
-	"api-rbac/internal/repository"
-	"api-rbac/internal/service"
+	"github.com/laazua/api-rbac/config"
+	"github.com/laazua/api-rbac/internal/handler"
+	"github.com/laazua/api-rbac/internal/middleware"
+	"github.com/laazua/api-rbac/internal/repository"
+	"github.com/laazua/api-rbac/internal/service"
 )
 
 func Setup(

@@ -7,10 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"api-rbac/internal/repository"
-	jwtpkg "api-rbac/pkg/jwt"
-	"api-rbac/pkg/response"
-	"api-rbac/pkg/errcode"
+	"github.com/laazua/api-rbac/internal/repository"
+	jwtpkg "github.com/laazua/api-rbac/pkg/jwt"
+	"github.com/laazua/api-rbac/pkg/response"
+	"github.com/laazua/api-rbac/pkg/errcode"
 )
 
 // AuthRequired 返回 JWT + API Key 双认证中间件

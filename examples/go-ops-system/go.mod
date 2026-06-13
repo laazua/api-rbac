@@ -2,7 +2,7 @@ module go-ops-system
 
 go 1.26.1
 
-require api-rbac v0.0.0
+require github.com/laazua/api-rbac v0.0.0
 
 require (
 	github.com/bytedance/gopkg v0.1.4 // indirect
@@ -37,4 +37,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace api-rbac => ../../
+replace github.com/laazua/api-rbac => ../../

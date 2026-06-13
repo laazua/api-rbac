@@ -5,8 +5,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"api-rbac/internal/model"
-	"api-rbac/internal/repository"
+	"github.com/laazua/api-rbac/internal/model"
+	"github.com/laazua/api-rbac/internal/repository"
 )
 
 type PermissionService struct {
