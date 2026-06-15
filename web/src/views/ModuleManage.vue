@@ -20,7 +20,8 @@
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="模块名称" width="140">
           <template slot-scope="{ row }">
-            <i :class="row.icon" style="margin-right:6px"></i>
+            <img v-if="isImageIcon(row.icon)" :src="row.icon" class="inline-icon-img" />
+            <i v-else :class="row.icon" style="margin-right:6px"></i>
             {{ row.name }}
           </template>
         </el-table-column>
@@ -29,9 +30,10 @@
             <el-tag type="info" size="small">{{ row.code }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="icon" label="图标" width="100">
+        <el-table-column prop="icon" label="图标" width="120">
           <template slot-scope="{ row }">
-            <i :class="row.icon" style="font-size:20px"></i>
+            <img v-if="isImageIcon(row.icon)" :src="row.icon" class="inline-icon-img" style="width:22px;height:22px" />
+            <i v-else :class="row.icon" style="font-size:20px"></i>
             <span style="margin-left:4px;font-size:12px;color:#909399">{{ row.icon }}</span>
           </template>
         </el-table-column>
@@ -82,12 +84,15 @@
           <span style="font-size:12px;color:#909399">唯一标识符，推荐使用小写字母+下划线</span>
         </el-form-item>
         <el-form-item label="图标" prop="icon">
-          <el-input v-model="form.icon" placeholder="例：el-icon-setting">
+          <el-input v-model="form.icon" placeholder="例：el-icon-setting 或 https://...">
             <template slot="prepend">
-              <i :class="form.icon || 'el-icon-question'" />
+              <img v-if="isImageIcon(form.icon)" :src="form.icon" style="width:20px;height:20px;object-fit:contain" />
+              <i v-else :class="form.icon || 'el-icon-question'" />
             </template>
           </el-input>
-          <span style="font-size:12px;color:#909399">Element UI 图标类名，如 el-icon-setting</span>
+          <span style="font-size:12px;color:#909399">
+            支持 Element UI 图标 (el-icon-xxx)、其他 CSS 类 (fa fa-xxx)、图片 URL (https://...) 、Emoji
+          </span>
         </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="模块功能描述" />
@@ -117,6 +122,7 @@
 import {
   getModules, createModule, updateModule, deleteModule, hasPermission
 } from '../api'
+import { isImageIcon } from '../utils/icon'
 
 export default {
   name: 'ModuleManage',
@@ -138,6 +144,7 @@ export default {
   },
   created() { this.fetchData() },
   methods: {
+    isImageIcon,
     hasPermission,
     async fetchData() {
       this.loading = true

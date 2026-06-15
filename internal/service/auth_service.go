@@ -19,6 +19,15 @@ func NewAuthService(userRepo *repository.UserRepo) *AuthService {
 	return &AuthService{userRepo: userRepo}
 }
 
+// GetByID 根据 ID 获取用户信息
+func (s *AuthService) GetByID(id uint) (*model.User, error) {
+	user, err := s.userRepo.FindByID(id)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 // LoginResult 登录返回结果
 type LoginResult struct {
 	Token        string
@@ -46,7 +55,7 @@ func (s *AuthService) Login(req *model.LoginRequest) (*LoginResult, error) {
 	}
 
 	if user.Status == 0 {
-		return nil, errors.New("用户已被禁用")
+		return nil, errors.New("用户名或密码错误")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
@@ -72,6 +81,6 @@ func (s *AuthService) Login(req *model.LoginRequest) (*LoginResult, error) {
 }
 
 func (s *AuthService) HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
 	return string(bytes), err
 }

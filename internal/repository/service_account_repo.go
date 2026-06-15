@@ -42,7 +42,8 @@ func (r *ServiceAccountRepo) List(page, pageSize int, keyword string) ([]model.S
 
 	query := r.db.Model(&model.ServiceAccount{})
 	if keyword != "" {
-		query = query.Where("name LIKE ? OR description LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+		escaped := escapeLike(keyword)
+		query = query.Where("name LIKE ? OR description LIKE ?", "%"+escaped+"%", "%"+escaped+"%")
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -86,4 +87,31 @@ func (r *ServiceAccountRepo) FindByNameIncludingDeleted(name string) (*model.Ser
 		return nil, err
 	}
 	return &sa, nil
+}
+
+// FindByIDWithRoles 根据 ID 查询服务账号，预加载角色和权限
+func (r *ServiceAccountRepo) FindByIDWithRoles(id uint) (*model.ServiceAccount, error) {
+	var sa model.ServiceAccount
+	err := r.db.Preload("Roles.Permissions").First(&sa, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &sa, nil
+}
+
+// FindServiceAccountIDsByRoleID 查询拥有该角色的所有服务账号 ID
+func (r *ServiceAccountRepo) FindServiceAccountIDsByRoleID(roleID uint) ([]uint, error) {
+	var ids []uint
+	err := r.db.Table("service_account_roles").Where("role_id = ?", roleID).Pluck("service_account_id", &ids).Error
+	return ids, err
+}
+
+// AssignRoles 覆盖式分配服务账号角色
+func (r *ServiceAccountRepo) AssignRoles(sa *model.ServiceAccount, roles []model.Role) error {
+	return r.db.Model(sa).Association("Roles").Replace(roles)
+}
+
+// RemoveRole 移除服务账号的指定角色
+func (r *ServiceAccountRepo) RemoveRole(saID, roleID uint) error {
+	return r.db.Model(&model.ServiceAccount{BaseModel: model.BaseModel{ID: saID}}).Association("Roles").Delete(&model.Role{BaseModel: model.BaseModel{ID: roleID}})
 }

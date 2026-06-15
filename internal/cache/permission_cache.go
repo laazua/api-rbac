@@ -68,6 +68,37 @@ func (c *PermissionCache) InvalidateUsers(ctx context.Context, userIDs []uint) e
 	return c.rdb.Del(ctx, keys...).Err()
 }
 
+// HasWildcard 检查用户是否拥有 *:* 超级管理员权限 (带缓存)
+func (c *PermissionCache) HasWildcard(ctx context.Context, userID uint) (bool, bool, error) {
+	key := wildcardKey(userID)
+	val, err := c.rdb.Get(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return false, false, nil // 缓存未命中
+		}
+		return false, false, fmt.Errorf("redis get wildcard: %w", err)
+	}
+	return true, val == "1", nil
+}
+
+// SetHasWildcard 缓存用户的超级管理员状态
+func (c *PermissionCache) SetHasWildcard(ctx context.Context, userID uint, hasWildcard bool) error {
+	v := "0"
+	if hasWildcard {
+		v = "1"
+	}
+	return c.rdb.Set(ctx, wildcardKey(userID), v, c.ttl).Err()
+}
+
+// InvalidateWildcard 清除用户的超级管理员缓存
+func (c *PermissionCache) InvalidateWildcard(ctx context.Context, userID uint) error {
+	return c.rdb.Del(ctx, wildcardKey(userID)).Err()
+}
+
+func wildcardKey(userID uint) string {
+	return fmt.Sprintf("rbac:user:%d:wildcard", userID)
+}
+
 func cacheKey(userID uint) string {
 	return fmt.Sprintf("rbac:user:%d:perms", userID)
 }

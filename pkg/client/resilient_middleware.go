@@ -1,6 +1,9 @@
 package client
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -145,24 +148,54 @@ func globalOnFailure() {
 	}
 }
 
+// extractUserID 从 JWT payload 中提取 user_id（不验证签名）
+func extractUserID(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid token format")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decode payload: %w", err)
+	}
+	var claims struct {
+		UserID uint `json:"user_id"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("unmarshal claims: %w", err)
+	}
+	if claims.UserID == 0 {
+		return "", fmt.Errorf("no user_id in token")
+	}
+	return fmt.Sprintf("user:%d", claims.UserID), nil
+}
+
 func globalPopulateCache(client *RBACClient, token string) {
+	key, err := extractUserID(token)
+	if err != nil {
+		return
+	}
 	menu, err := client.GetMenu(token)
 	if err != nil || menu.Code != 0 {
 		return
 	}
 	resilientMu.Lock()
 	defer resilientMu.Unlock()
-	resilientCacheStore[token] = cacheEntry{
+	resilientCacheStore[key] = cacheEntry{
 		perms:     menu.Data.Permissions,
 		timestamp: time.Now(),
 	}
 }
 
 func globalCheckFromCache(token, resource, action string, ttl time.Duration) bool {
+	key, err := extractUserID(token)
+	if err != nil {
+		return false
+	}
 	resilientMu.Lock()
 	defer resilientMu.Unlock()
 
-	entry, ok := resilientCacheStore[token]
+	entry, ok := resilientCacheStore[key]
 	if !ok || time.Since(entry.timestamp) > ttl {
 		return false
 	}

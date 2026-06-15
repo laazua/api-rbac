@@ -7,6 +7,7 @@ type ServiceAccount struct {
 	ApiKeyHash  string `json:"-" gorm:"type:varchar(128);not null"`  // SHA256 哈希，不暴露到 JSON
 	Status      int    `json:"status" gorm:"type:tinyint;default:1"` // 1=启用, 0=禁用
 	Description string `json:"description" gorm:"type:varchar(255)"`
+	Roles       []Role `json:"roles,omitempty" gorm:"many2many:service_account_roles;"`
 }
 
 func (ServiceAccount) TableName() string {

@@ -31,7 +31,7 @@ func (s *UserService) Create(req *model.CreateUserRequest) (*model.User, error) 
 	if existing != nil {
 		if existing.DeletedAt.Valid {
 			// 存在同名已软删除的用户，恢复并更新该记录
-			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), BcryptCost)
 			if err != nil {
 				return nil, err
 			}
@@ -52,7 +52,7 @@ func (s *UserService) Create(req *model.CreateUserRequest) (*model.User, error) 
 		return nil, errors.New("用户名已存在")
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), BcryptCost)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func (s *UserService) ChangePassword(id uint, req *model.ChangePasswordRequest) 
 	}
 
 	// 加密新密码
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), BcryptCost)
 	if err != nil {
 		return err
 	}

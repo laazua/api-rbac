@@ -112,3 +112,46 @@ func (h *ServiceAccountHandler) Delete(c *gin.Context) {
 
 	response.Success(c, nil)
 }
+
+// AssignRoles 为服务账号分配角色
+func (h *ServiceAccountHandler) AssignRoles(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+
+	var req model.AssignRolesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorWithMsg(c, errcode.InvalidParams, err.Error())
+		return
+	}
+
+	if err := h.svc.AssignRoles(uint(id), req.RoleIDs); err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	response.Success(c, nil)
+}
+
+// RemoveRole 移除服务账号角色
+func (h *ServiceAccountHandler) RemoveRole(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	roleID, err := strconv.ParseUint(c.Param("roleId"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+
+	if err := h.svc.RemoveRole(uint(id), uint(roleID)); err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	response.Success(c, nil)
+}

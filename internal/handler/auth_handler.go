@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"context"
+	"time"
+
 	"github.com/gin-gonic/gin"
 
+	"github.com/laazua/api-rbac/internal/cache"
 	"github.com/laazua/api-rbac/internal/model"
 	"github.com/laazua/api-rbac/internal/service"
 	"github.com/laazua/api-rbac/pkg/errcode"
@@ -24,10 +28,11 @@ type AuthHandler struct {
 	authService   *service.AuthService
 	permService   *service.PermissionCheckService
 	moduleService *service.ModuleService
+	blacklist     *cache.TokenBlacklist
 }
 
-func NewAuthHandler(authService *service.AuthService, permService *service.PermissionCheckService, moduleService *service.ModuleService) *AuthHandler {
-	return &AuthHandler{authService: authService, permService: permService, moduleService: moduleService}
+func NewAuthHandler(authService *service.AuthService, permService *service.PermissionCheckService, moduleService *service.ModuleService, blacklist *cache.TokenBlacklist) *AuthHandler {
+	return &AuthHandler{authService: authService, permService: permService, moduleService: moduleService, blacklist: blacklist}
 }
 
 // Login 用户登录
@@ -72,7 +77,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Success      200  {object}  response.Response  "登出成功"
 // @Router       /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// 无状态 JWT，客户端只需丢弃 Token 即可
+	// 将当前 Access Token 加入黑名单
+	jti, _ := c.Get("jti")
+	if jtiStr, ok := jti.(string); ok && jtiStr != "" && h.blacklist != nil {
+		_ = h.blacklist.Revoke(context.Background(), jtiStr, 2*time.Hour)
+	}
 	response.Success(c, nil)
 }
 
@@ -97,6 +106,19 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if err != nil {
 		response.ErrorWithMsg(c, errcode.TokenInvalid, "刷新令牌无效或已过期")
 		return
+	}
+
+	// 检查用户是否仍然存在且启用
+	user, err := h.authService.GetByID(claims.UserID)
+	if err != nil || user.Status == 0 {
+		response.ErrorWithMsg(c, errcode.TokenInvalid, "用户不存在或已被禁用")
+		return
+	}
+
+	// 撤销旧的 Refresh Token，防止重放攻击
+	if h.blacklist != nil && claims.JTI != "" {
+		refreshTTL := time.Duration(jwtpkg.GetRefreshExpireDay()*24) * time.Hour
+		_ = h.blacklist.Revoke(context.Background(), claims.JTI, refreshTTL)
 	}
 
 	// 生成新的 Token 对

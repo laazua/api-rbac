@@ -128,6 +128,38 @@ func (s *ServiceAccountService) VerifyApiKey(apiKey string) (*model.ServiceAccou
 	return s.repo.FindByApiKeyHash(hashApiKey(apiKey))
 }
 
+// AssignRoles 为服务账号分配角色（覆盖式）
+func (s *ServiceAccountService) AssignRoles(id uint, roleIDs []uint) error {
+	sa, err := s.repo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("服务账号不存在")
+		}
+		return err
+	}
+
+	// 获取角色实体
+	var roles []model.Role
+	for _, rid := range roleIDs {
+		roles = append(roles, model.Role{BaseModel: model.BaseModel{ID: rid}})
+	}
+
+	return s.repo.AssignRoles(sa, roles)
+}
+
+// RemoveRole 移除服务账号的指定角色
+func (s *ServiceAccountService) RemoveRole(id, roleID uint) error {
+	_, err := s.repo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("服务账号不存在")
+		}
+		return err
+	}
+
+	return s.repo.RemoveRole(id, roleID)
+}
+
 // generateApiKey 生成 API Key，格式: rbac_sa_ + 32位随机hex
 func generateApiKey() (string, error) {
 	b := make([]byte, 32)

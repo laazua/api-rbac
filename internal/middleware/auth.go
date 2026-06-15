@@ -1,12 +1,14 @@
 package middleware
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/laazua/api-rbac/internal/cache"
 	"github.com/laazua/api-rbac/internal/repository"
 	"github.com/laazua/api-rbac/pkg/errcode"
 	jwtpkg "github.com/laazua/api-rbac/pkg/jwt"
@@ -17,7 +19,7 @@ import (
 // 支持两种认证方式:
 // 1. X-API-Key 头部 — 服务间调用
 // 2. Authorization: Bearer <token> — 用户请求
-func AuthRequired(saRepo *repository.ServiceAccountRepo) gin.HandlerFunc {
+func AuthRequired(saRepo *repository.ServiceAccountRepo, blacklist *cache.TokenBlacklist) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 优先检查 X-API-Key（服务间调用）
 		apiKey := c.GetHeader("X-API-Key")
@@ -28,9 +30,10 @@ func AuthRequired(saRepo *repository.ServiceAccountRepo) gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			// API Key 认证: 仅标记认证方式，不设置 user_id
-			// RequirePermission 中间件检测到 apikey 类型直接放行
+			// API Key 认证: 设置 user_id 和 principal_type 用于权限检查
 			c.Set("auth_type", "apikey")
+			c.Set("user_id", sa.ID)
+			c.Set("principal_type", "service_account")
 			c.Set("service_account_id", sa.ID)
 			c.Set("service_account_name", sa.Name)
 			c.Next()
@@ -63,9 +66,18 @@ func AuthRequired(saRepo *repository.ServiceAccountRepo) gin.HandlerFunc {
 			return
 		}
 
+		// 检查令牌是否已被撤销（黑名单）
+		if blacklist != nil && blacklist.IsRevoked(context.Background(), claims.JTI) {
+			response.Error(c, errcode.TokenInvalid)
+			c.Abort()
+			return
+		}
+
 		c.Set("auth_type", "jwt")
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Set("principal_type", "user")
+		c.Set("jti", claims.JTI)
 		c.Next()
 	}
 }

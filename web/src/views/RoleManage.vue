@@ -22,7 +22,8 @@
         <el-table-column label="可访问模块" width="200">
           <template slot-scope="{ row }">
             <el-tag v-for="m in (row.modules || [])" :key="m.id" size="mini" type="success" style="margin:2px">
-              <i :class="m.icon" style="margin-right:2px" />{{ m.name }}
+              <img v-if="isImageIcon(m.icon)" :src="m.icon" class="tag-icon-img" />
+              <i v-else :class="m.icon" style="margin-right:2px" />{{ m.name }}
             </el-tag>
             <span v-if="!row.modules || row.modules.length === 0" style="color:#c0c4cc">未分配</span>
           </template>
@@ -105,7 +106,8 @@
         </div>
         <div v-for="group in groupedPerms" :key="group.moduleId" class="perm-group">
           <div class="perm-group-header">
-            <i :class="group.icon || 'el-icon-menu'" />
+            <img v-if="isImageIcon(group.icon)" :src="group.icon" class="tag-icon-img" />
+            <i v-else :class="group.icon || 'el-icon-menu'" />
             <b>{{ group.moduleName }}</b>
             <span class="perm-group-code">({{ group.moduleCode }})</span>
             <el-button type="text" size="mini" @click="selectAllInGroup(group.moduleId)">全选</el-button>
@@ -144,6 +146,7 @@ import {
   assignRolePermissions, getPermissions,
   assignRoleModules, getModules, hasPermission
 } from '../api'
+import { isImageIcon } from '../utils/icon'
 
 export default {
   name: 'RoleManage',
@@ -166,6 +169,7 @@ export default {
   },
   created() { this.fetchData() },
   methods: {
+    isImageIcon,
     hasPermission,
     async fetchData() {
       this.loading = true
@@ -415,5 +419,12 @@ export default {
 .perm-checkboxes .el-checkbox {
   margin-right: 16px;
   margin-bottom: 4px;
+}
+.tag-icon-img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  margin-right: 2px;
+  vertical-align: middle;
 }
 </style>

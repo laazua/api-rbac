@@ -45,7 +45,8 @@
             >
               <div class="card-body">
                 <div class="card-icon" :style="{ background: iconBg(m.icon) }">
-                  <i :class="m.icon || 'el-icon-menu'" />
+                  <img v-if="isImageIcon(m.icon)" :src="m.icon" class="card-icon-img" />
+                  <i v-else :class="m.icon || 'el-icon-menu'" />
                 </div>
                 <h3 class="card-title">{{ m.name }}</h3>
                 <p class="card-desc">{{ m.description || '暂无描述' }}</p>
@@ -69,6 +70,7 @@
 
 <script>
 import { getUserModules } from '../api'
+import { isImageIcon, iconGradient } from '../utils/icon'
 
 export default {
   name: 'Portal',
@@ -90,20 +92,8 @@ export default {
     }
   },
   methods: {
-    iconBg(icon) {
-      // 根据图标类型返回不同渐变色
-      const map = {
-        'el-icon-setting': 'linear-gradient(135deg, #667eea, #764ba2)',
-        'el-icon-user': 'linear-gradient(135deg, #409eff, #337ecc)',
-        'el-icon-s-custom': 'linear-gradient(135deg, #f093fb, #f5576c)',
-        'el-icon-lock': 'linear-gradient(135deg, #4facfe, #00f2fe)',
-        'el-icon-s-grid': 'linear-gradient(135deg, #43e97b, #38f9d7)',
-        'el-icon-s-data': 'linear-gradient(135deg, #fa709a, #fee140)',
-        'el-icon-s-order': 'linear-gradient(135deg, #a18cd1, #fbc2eb)',
-        'el-icon-s-tools': 'linear-gradient(135deg, #fccb90, #d57eeb)'
-      }
-      return map[icon] || 'linear-gradient(135deg, #409eff, #337ecc)'
-    },
+    isImageIcon,
+    iconBg(icon) { return iconGradient(icon) },
     enterModule(m) {
       // 如果模块配置了外部 URL → 用 iframe 容器加载
       if (m.url) {
@@ -226,6 +216,12 @@ export default {
 .card-icon i {
   font-size: 30px;
   color: #fff;
+}
+.card-icon .card-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 16px;
 }
 .card-title {
   margin: 0 0 8px 0;

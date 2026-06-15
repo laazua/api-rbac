@@ -91,6 +91,7 @@ func main() {
 
 	// 初始化 Redis（可选，连接失败仅日志警告不退出）
 	var permCache *cache.PermissionCache
+	var blacklist *cache.TokenBlacklist
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Addr(),
 		Password: cfg.Redis.Password,
@@ -101,6 +102,7 @@ func main() {
 		log.Printf("⚠️  Redis 连接失败 (%v)，权限缓存已禁用，将直接查询数据库", err)
 	} else {
 		permCache = cache.NewPermissionCache(rdb, 5*time.Minute)
+		blacklist = cache.NewTokenBlacklist(rdb)
 		log.Println("✅ Redis 连接成功，权限缓存已启用")
 	}
 
@@ -129,7 +131,7 @@ func main() {
 
 	// 初始化 Service
 	authService := service.NewAuthService(userRepo)
-	permCheckService := service.NewPermissionCheckService(userRepo, permCache)
+	permCheckService := service.NewPermissionCheckService(userRepo, permRepo, saRepo, permCache)
 	userService := service.NewUserService(userRepo, roleRepo, permCache)
 	roleService := service.NewRoleService(roleRepo, permRepo, moduleRepo, permCache)
 	permService := service.NewPermissionService(permRepo)
@@ -137,7 +139,7 @@ func main() {
 	moduleService := service.NewModuleService(moduleRepo)
 
 	// 初始化 Handler
-	authH := handler.NewAuthHandler(authService, permCheckService, moduleService)
+	authH := handler.NewAuthHandler(authService, permCheckService, moduleService, blacklist)
 	userH := handler.NewUserHandler(userService)
 	roleH := handler.NewRoleHandler(roleService)
 	permH := handler.NewPermissionHandler(permService)
@@ -150,7 +152,7 @@ func main() {
 	}
 
 	// 设置路由
-	r := router.Setup(authH, userH, roleH, permH, saH, moduleH, cfg, permCheckService, saRepo)
+	r := router.Setup(authH, userH, roleH, permH, saH, moduleH, cfg, permCheckService, saRepo, blacklist)
 
 	// 创建 HTTP Server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -256,7 +258,7 @@ func initSuperAdmin(db *gorm.DB) error {
 		}
 
 		// 5. 创建 admin 用户
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), service.BcryptCost)
 		if err != nil {
 			return fmt.Errorf("密码加密失败: %w", err)
 		}
@@ -395,7 +397,7 @@ func initDefaultServiceAccount(saService *service.ServiceAccountService) error {
 	log.Println("========================================")
 	log.Println("  ✅ 默认服务账号已创建")
 	log.Printf("     Name: %s", sa.Name)
-	log.Printf("     API Key: %s", apiKey)
+	log.Printf("     API Key (仅显示后4位): ...%s", apiKey[len(apiKey)-4:])
 	log.Println("     请妥善保管 API Key，此信息仅显示一次")
 	log.Println("========================================")
 	return nil

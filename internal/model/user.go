@@ -40,7 +40,7 @@ type ChangePasswordRequest struct {
 
 // AssignRolesRequest 为用户分配角色请求
 type AssignRolesRequest struct {
-	RoleIDs []uint `json:"role_ids" binding:"required"` // 例: [1, 2]
+	RoleIDs []uint `json:"role_ids" binding:"required,min=1,max=100"` // 例: [1, 2]
 }
 
 // CheckPermissionRequest 权限检查请求

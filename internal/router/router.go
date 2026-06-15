@@ -1,11 +1,14 @@
 package router
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
 	"github.com/laazua/api-rbac/config"
+	"github.com/laazua/api-rbac/internal/cache"
 	"github.com/laazua/api-rbac/internal/handler"
 	"github.com/laazua/api-rbac/internal/middleware"
 	"github.com/laazua/api-rbac/internal/repository"
@@ -22,34 +25,40 @@ func Setup(
 	cfg *config.Config,
 	permCheckSvc *service.PermissionCheckService,
 	saRepo *repository.ServiceAccountRepo,
+	blacklist *cache.TokenBlacklist,
 ) *gin.Engine {
 	r := gin.Default()
 
 	// 全局中间件
 	r.Use(middleware.CORS(cfg.CORS))
 	r.Use(middleware.Logger())
+	r.Use(middleware.MaxBodySize(10 << 20)) // 限制请求体最大 10MB
 
 	// 健康检查
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Swagger 文档
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// Swagger 文档 — 仅非生产环境可访问
+	if cfg.Server.Mode != gin.ReleaseMode {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
 
 	api := r.Group("/api/v1")
 	{
 		// 认证接口 - 无需 JWT
 		auth := api.Group("/auth")
 		{
-			auth.POST("/login", authH.Login)
-			auth.POST("/refresh", authH.Refresh)
+			// 登录和刷新 Token 接口增加速率限制 (5次/分钟)
+			loginLimiter := middleware.NewRateLimiter(5, time.Minute)
+			auth.POST("/login", loginLimiter.Limit(), authH.Login)
+			auth.POST("/refresh", loginLimiter.Limit(), authH.Refresh)
 			auth.POST("/introspect", authH.Introspect)
 		}
 
 		// 以下接口需要认证
 		authed := api.Group("")
-		authed.Use(middleware.AuthRequired(saRepo))
+		authed.Use(middleware.AuthRequired(saRepo, blacklist))
 		{
 			// 登出 & Token验证 & 权限检查 & 菜单 & 模块
 			authed.POST("/auth/logout", authH.Logout)
@@ -121,6 +130,8 @@ func Setup(
 				saWrite.POST("", middleware.RequirePermission(permCheckSvc, "service_account", "create"), saH.Create)
 				saWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "service_account", "update"), saH.Update)
 				saWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "service_account", "delete"), saH.Delete)
+				saWrite.POST("/:id/roles", middleware.RequirePermission(permCheckSvc, "service_account", "update"), saH.AssignRoles)
+				saWrite.DELETE("/:id/roles/:roleId", middleware.RequirePermission(permCheckSvc, "service_account", "update"), saH.RemoveRole)
 			}
 
 			// ---- 模块管理 ----

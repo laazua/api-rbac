@@ -240,8 +240,16 @@ func (h *RoleHandler) AssignModules(c *gin.Context) {
 // @Failure      404  {object}  response.Response  "角色不存在"
 // @Router       /roles/{id}/modules/{modId} [delete]
 func (h *RoleHandler) RemoveModule(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	modID, _ := strconv.ParseUint(c.Param("modId"), 10, 64)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	modID, err := strconv.ParseUint(c.Param("modId"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
 
 	if err := h.roleService.RemoveModule(uint(id), uint(modID)); err != nil {
 		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
@@ -263,8 +271,16 @@ func (h *RoleHandler) RemoveModule(c *gin.Context) {
 // @Failure      404  {object}  response.Response  "角色不存在"
 // @Router       /roles/{id}/permissions/{permId} [delete]
 func (h *RoleHandler) RemovePermission(c *gin.Context) {
-	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
-	permID, _ := strconv.ParseUint(c.Param("permId"), 10, 64)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+	permID, err := strconv.ParseUint(c.Param("permId"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
 
 	if err := h.roleService.RemovePermission(uint(id), uint(permID)); err != nil {
 		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
