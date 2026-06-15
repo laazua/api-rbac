@@ -20,6 +20,7 @@ Thumbs.db
 vendor/
 
 # 配置文件 (含敏感信息，仅保留模板)
+config.yaml
 config/config.yaml
 
 # 日志
