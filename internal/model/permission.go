@@ -15,16 +15,16 @@ func (Permission) TableName() string {
 // CreatePermissionRequest 创建权限请求
 type CreatePermissionRequest struct {
 	Name        string `json:"name" binding:"required,min=2,max=64" example:"删除用户"`
-	Resource    string `json:"resource" binding:"required,min=2,max=64" example:"user"`
-	Action      string `json:"action" binding:"required,min=2,max=64" example:"delete"`
+	Resource    string `json:"resource" binding:"required,min=1,max=64" example:"user"`
+	Action      string `json:"action" binding:"required,min=1,max=64" example:"delete"`
 	Description string `json:"description" binding:"max=255" example:"允许删除其他用户账号"`
 }
 
 // UpdatePermissionRequest 更新权限请求
 type UpdatePermissionRequest struct {
 	Name        string `json:"name" binding:"required,min=2,max=64" example:"删除任意用户"`
-	Resource    string `json:"resource" binding:"required,min=2,max=64" example:"user"`
-	Action      string `json:"action" binding:"required,min=2,max=64" example:"delete"`
+	Resource    string `json:"resource" binding:"required,min=1,max=64" example:"user"`
+	Action      string `json:"action" binding:"required,min=1,max=64" example:"delete"`
 	Description string `json:"description" binding:"max=255" example:"允许删除任意用户账号"`
 }
 

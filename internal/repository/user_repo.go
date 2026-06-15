@@ -89,6 +89,22 @@ func (r *UserRepo) Delete(id uint) error {
 	return r.db.Delete(&model.User{}, id).Error
 }
 
+// Restore 恢复已软删除的用户（将 deleted_at 置为 NULL）
+func (r *UserRepo) Restore(id uint) error {
+	return r.db.Unscoped().Model(&model.User{}).Where("id = ?", id).Update("deleted_at", nil).Error
+}
+
+// FindByUsernameIncludingDeleted 查询用户（包括已软删除的）
+// 用于 Create 时判断是否存在同名已软删除记录
+func (r *UserRepo) FindByUsernameIncludingDeleted(username string) (*model.User, error) {
+	var user model.User
+	err := r.db.Unscoped().Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *UserRepo) AssignRoles(user *model.User, roles []model.Role) error {
 	return r.db.Model(user).Association("Roles").Replace(roles)
 }

@@ -17,8 +17,8 @@
 
     <div class="table-container">
       <el-table v-loading="loading" :data="tableData" border stripe>
-        <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="name" label="角色名称" width="160" />
+        <el-table-column prop="id" label="ID" width="60" align="center" sortable />
+        <el-table-column prop="name" label="角色名称" width="160" align="left" />
         <el-table-column prop="description" label="描述" min-width="200" />
         <el-table-column label="关联权限" width="140">
           <template slot-scope="{ row }">
@@ -31,7 +31,7 @@
         <el-table-column prop="created_at" label="创建时间" width="180">
           <template slot-scope="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240">
+        <el-table-column label="操作" width="240" align="center">
           <template slot-scope="{ row }">
             <el-button v-if="hasPermission('role','update')" type="text" icon="el-icon-edit" @click="openEdit(row)">编辑</el-button>
             <el-button v-if="hasPermission('role','update')" type="text" icon="el-icon-lock" @click="openAssignPerms(row)">分配权限</el-button>
@@ -108,7 +108,9 @@ export default {
       this.loading = true
       try {
         const res = await getRoles(this.search)
-        this.tableData = res.data.list || []
+        const list = res.data.list || []
+        list.sort((a, b) => a.id - b.id)
+        this.tableData = list
         this.total = res.data.total || 0
       } finally { this.loading = false }
     },

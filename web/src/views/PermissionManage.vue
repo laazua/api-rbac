@@ -59,7 +59,7 @@
         </el-form-item>
         <el-form-item label="资源" prop="resource">
           <el-input v-model="form.resource" placeholder="例：user" />
-          <span style="font-size:12px;color:#909399">"{resource}:{action}" 组合确定一个权限；"*" 为通配符</span>
+        <!--  <span style="font-size:12px;color:#909399">"{resource}:{action}" 组合确定一个权限；"*" 为通配符</span> -->
         </el-form-item>
         <el-form-item label="操作" prop="action">
           <el-select v-model="form.action" placeholder="选择操作" style="width:100%">
@@ -74,6 +74,7 @@
         </el-form-item>
         <el-form-item label="描述" prop="description">
           <el-input v-model="form.description" type="textarea" :rows="3" placeholder="权限用途说明" />
+          <span style="font-size:12px;color:#909399">"{resource}:{action}" 组合确定一个权限；"*" 为通配符</span>
         </el-form-item>
       </el-form>
       <span slot="footer">
@@ -112,7 +113,9 @@ export default {
       this.loading = true
       try {
         const res = await getPermissions(this.search)
-        this.tableData = res.data.list || []
+        const list = res.data.list || []
+        list.sort((a, b) => a.id - b.id)
+        this.tableData = list
         this.total = res.data.total || 0
       } finally { this.loading = false }
     },

@@ -23,6 +23,38 @@ func NewServiceAccountService(repo *repository.ServiceAccountRepo) *ServiceAccou
 
 // Create 创建服务账号，返回的 ApiKey 仅此一次明文展示
 func (s *ServiceAccountService) Create(req *model.CreateServiceAccountRequest) (*model.ServiceAccount, string, error) {
+	// 检查是否存在同名服务账号（包括已软删除的）
+	existing, err := s.repo.FindByNameIncludingDeleted(req.Name)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, "", err
+	}
+	if existing != nil {
+		if existing.DeletedAt.Valid {
+			// 存在同名已软删除的服务账号，恢复并重新生成 API Key
+			apiKey, err := generateApiKey()
+			if err != nil {
+				return nil, "", fmt.Errorf("生成API Key失败: %w", err)
+			}
+			if err := s.repo.Restore(existing.ID); err != nil {
+				return nil, "", err
+			}
+			if err := s.repo.UpdateApiKeyHash(existing.ID, hashApiKey(apiKey)); err != nil {
+				return nil, "", err
+			}
+			existing.Description = req.Description
+			existing.Status = 1
+			if err := s.repo.Update(existing); err != nil {
+				return nil, "", err
+			}
+			sa, err := s.repo.FindByID(existing.ID)
+			if err != nil {
+				return nil, "", err
+			}
+			return sa, apiKey, nil
+		}
+		return nil, "", errors.New("服务账号名称已存在")
+	}
+
 	apiKey, err := generateApiKey()
 	if err != nil {
 		return nil, "", fmt.Errorf("生成API Key失败: %w", err)

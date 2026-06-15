@@ -22,11 +22,24 @@ func NewRoleService(roleRepo *repository.RoleRepo, permissionRepo *repository.Pe
 }
 
 func (s *RoleService) Create(req *model.CreateRoleRequest) (*model.Role, error) {
-	exists, err := s.roleRepo.ExistsByName(req.Name)
-	if err != nil {
+	// 检查是否存在同名角色（包括已软删除的）
+	existing, err := s.roleRepo.FindByNameIncludingDeleted(req.Name)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	if exists {
+	if existing != nil {
+		if existing.DeletedAt.Valid {
+			// 存在同名已软删除的角色，恢复并更新该记录
+			if err := s.roleRepo.Restore(existing.ID); err != nil {
+				return nil, err
+			}
+			existing.Name = req.Name
+			existing.Description = req.Description
+			if err := s.roleRepo.Update(existing); err != nil {
+				return nil, err
+			}
+			return s.roleRepo.FindByID(existing.ID)
+		}
 		return nil, errors.New("角色名称已存在")
 	}
 
@@ -92,6 +105,16 @@ func (s *RoleService) Delete(id uint) error {
 		}
 		return err
 	}
+
+	// 检查是否有用户关联了该角色，有关联则不允许删除
+	userIDs, err := s.roleRepo.FindUserIDsByRoleID(id)
+	if err != nil {
+		return err
+	}
+	if len(userIDs) > 0 {
+		return errors.New("该角色已被用户关联，请先解除用户关联后再删除")
+	}
+
 	return s.roleRepo.Delete(id)
 }
 

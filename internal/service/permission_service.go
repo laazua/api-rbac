@@ -18,11 +18,26 @@ func NewPermissionService(permRepo *repository.PermissionRepo) *PermissionServic
 }
 
 func (s *PermissionService) Create(req *model.CreatePermissionRequest) (*model.Permission, error) {
-	exists, err := s.permRepo.ExistsByName(req.Name)
-	if err != nil {
+	// 检查是否存在同名权限（包括已软删除的）
+	existing, err := s.permRepo.FindByNameIncludingDeleted(req.Name)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	if exists {
+	if existing != nil {
+		if existing.DeletedAt.Valid {
+			// 存在同名已软删除的权限，恢复并更新该记录
+			if err := s.permRepo.Restore(existing.ID); err != nil {
+				return nil, err
+			}
+			existing.Name = req.Name
+			existing.Resource = req.Resource
+			existing.Action = req.Action
+			existing.Description = req.Description
+			if err := s.permRepo.Update(existing); err != nil {
+				return nil, err
+			}
+			return s.permRepo.FindByID(existing.ID)
+		}
 		return nil, errors.New("权限名称已存在")
 	}
 
@@ -92,5 +107,15 @@ func (s *PermissionService) Delete(id uint) error {
 		}
 		return err
 	}
+
+	// 检查是否有角色关联了该权限，有关联则不允许删除
+	roleCount, err := s.permRepo.CountRolesByPermissionID(id)
+	if err != nil {
+		return err
+	}
+	if roleCount > 0 {
+		return errors.New("该权限已被角色关联，请先解除角色关联后再删除")
+	}
+
 	return s.permRepo.Delete(id)
 }

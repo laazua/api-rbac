@@ -23,11 +23,32 @@ func NewUserService(userRepo *repository.UserRepo, roleRepo *repository.RoleRepo
 }
 
 func (s *UserService) Create(req *model.CreateUserRequest) (*model.User, error) {
-	exists, err := s.userRepo.ExistsByUsername(req.Username)
-	if err != nil {
+	// 检查是否存在同名用户（包括已软删除的）
+	existing, err := s.userRepo.FindByUsernameIncludingDeleted(req.Username)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	if exists {
+	if existing != nil {
+		if existing.DeletedAt.Valid {
+			// 存在同名已软删除的用户，恢复并更新该记录
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+			if err != nil {
+				return nil, err
+			}
+			if err := s.userRepo.Restore(existing.ID); err != nil {
+				return nil, err
+			}
+			if err := s.userRepo.UpdatePassword(existing.ID, string(hashedPassword)); err != nil {
+				return nil, err
+			}
+			existing.Email = req.Email
+			existing.Status = 1
+			if err := s.userRepo.Update(existing); err != nil {
+				return nil, err
+			}
+			// 重新加载完整数据返回
+			return s.userRepo.FindByID(existing.ID)
+		}
 		return nil, errors.New("用户名已存在")
 	}
 

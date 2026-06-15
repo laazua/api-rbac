@@ -67,6 +67,28 @@ func (r *PermissionRepo) Delete(id uint) error {
 	return r.db.Delete(&model.Permission{}, id).Error
 }
 
+// Restore 恢复已软删除的权限（将 deleted_at 置为 NULL）
+func (r *PermissionRepo) Restore(id uint) error {
+	return r.db.Unscoped().Model(&model.Permission{}).Where("id = ?", id).Update("deleted_at", nil).Error
+}
+
+// FindByNameIncludingDeleted 查询权限（包括已软删除的）
+func (r *PermissionRepo) FindByNameIncludingDeleted(name string) (*model.Permission, error) {
+	var perm model.Permission
+	err := r.db.Unscoped().Where("name = ?", name).First(&perm).Error
+	if err != nil {
+		return nil, err
+	}
+	return &perm, nil
+}
+
+// CountRolesByPermissionID 统计引用了该权限的角色数量
+func (r *PermissionRepo) CountRolesByPermissionID(permID uint) (int64, error) {
+	var count int64
+	err := r.db.Table("role_permissions").Where("permission_id = ?", permID).Count(&count).Error
+	return count, err
+}
+
 func (r *PermissionRepo) ExistsByName(name string, excludeID ...uint) (bool, error) {
 	var count int64
 	query := r.db.Model(&model.Permission{}).Where("name = ?", name)

@@ -113,7 +113,12 @@ html, body, #app {
   color: #909399;
 }
 
-/* 对话框内的穿梭框 */
+/* 对话框内的穿梭框：负 margin 抵消 body 的 20px padding，
+   面板 220×2 + 按钮区 ~94px = 534px 需在 540px 内容区完整显示 */
+.el-dialog .el-transfer {
+  margin-left: -20px;
+  margin-right: -20px;
+}
 .el-transfer-panel {
   width: 220px;
 }

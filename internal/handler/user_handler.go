@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -150,7 +151,11 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	}
 
 	if err := h.userService.Delete(uint(id)); err != nil {
-		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		if strings.Contains(err.Error(), "不存在") {
+			response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		} else {
+			response.ErrorWithMsg(c, errcode.InvalidParams, err.Error())
+		}
 		return
 	}
 

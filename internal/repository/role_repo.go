@@ -60,6 +60,21 @@ func (r *RoleRepo) Delete(id uint) error {
 	return r.db.Delete(&model.Role{}, id).Error
 }
 
+// Restore 恢复已软删除的角色（将 deleted_at 置为 NULL）
+func (r *RoleRepo) Restore(id uint) error {
+	return r.db.Unscoped().Model(&model.Role{}).Where("id = ?", id).Update("deleted_at", nil).Error
+}
+
+// FindByNameIncludingDeleted 查询角色（包括已软删除的）
+func (r *RoleRepo) FindByNameIncludingDeleted(name string) (*model.Role, error) {
+	var role model.Role
+	err := r.db.Unscoped().Where("name = ?", name).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
 func (r *RoleRepo) AssignPermissions(role *model.Role, perms []model.Permission) error {
 	return r.db.Model(role).Association("Permissions").Replace(perms)
 }

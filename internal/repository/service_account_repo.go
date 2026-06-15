@@ -64,6 +64,26 @@ func (r *ServiceAccountRepo) Update(sa *model.ServiceAccount) error {
 	return r.db.Model(sa).Select("description", "status", "updated_at").Updates(sa).Error
 }
 
+// UpdateApiKeyHash 更新服务账号的 API Key 哈希
+func (r *ServiceAccountRepo) UpdateApiKeyHash(id uint, hash string) error {
+	return r.db.Model(&model.ServiceAccount{}).Where("id = ?", id).Update("api_key_hash", hash).Error
+}
+
 func (r *ServiceAccountRepo) Delete(id uint) error {
 	return r.db.Delete(&model.ServiceAccount{}, id).Error
+}
+
+// Restore 恢复已软删除的服务账号（将 deleted_at 置为 NULL）
+func (r *ServiceAccountRepo) Restore(id uint) error {
+	return r.db.Unscoped().Model(&model.ServiceAccount{}).Where("id = ?", id).Update("deleted_at", nil).Error
+}
+
+// FindByNameIncludingDeleted 查询服务账号（包括已软删除的）
+func (r *ServiceAccountRepo) FindByNameIncludingDeleted(name string) (*model.ServiceAccount, error) {
+	var sa model.ServiceAccount
+	err := r.db.Unscoped().Where("name = ?", name).First(&sa).Error
+	if err != nil {
+		return nil, err
+	}
+	return &sa, nil
 }

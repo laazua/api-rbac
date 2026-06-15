@@ -44,12 +44,12 @@ request.interceptors.response.use(
         localStorage.removeItem('token')
         localStorage.removeItem('username')
         localStorage.removeItem('permissions')
-        Message.error('登录已过期，请重新登录')
+        Message.error(message || '登录已过期，请重新登录')
         window.location.hash = '#/login'
       } else if (status === 403) {
-        Message.error('无权限执行此操作')
+        Message.error(message || '无权限执行此操作')
       } else if (status === 404) {
-        Message.error('请求的资源不存在')
+        Message.error(message || '请求的资源不存在')
       } else {
         Message.error(message)
       }

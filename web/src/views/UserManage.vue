@@ -146,7 +146,9 @@ export default {
       this.loading = true
       try {
         const res = await getUsers(this.search)
-        this.tableData = res.data.list || []
+        const list = res.data.list || []
+        list.sort((a, b) => a.id - b.id)
+        this.tableData = list
         this.total = res.data.total || 0
       } finally { this.loading = false }
     },
