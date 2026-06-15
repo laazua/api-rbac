@@ -21,4 +21,5 @@
 /apiRbac -c config.yaml
 ```
 
-##### [详细说明参考](./DOCS.md)
+##### [接口详细说明参考](./DOCS.md)
+##### [前端详细说明参考](./web/DOCS.md)
