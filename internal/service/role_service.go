@@ -14,11 +14,12 @@ import (
 type RoleService struct {
 	roleRepo       *repository.RoleRepo
 	permissionRepo *repository.PermissionRepo
+	moduleRepo     *repository.ModuleRepo
 	cache          *cache.PermissionCache
 }
 
-func NewRoleService(roleRepo *repository.RoleRepo, permissionRepo *repository.PermissionRepo, cache *cache.PermissionCache) *RoleService {
-	return &RoleService{roleRepo: roleRepo, permissionRepo: permissionRepo, cache: cache}
+func NewRoleService(roleRepo *repository.RoleRepo, permissionRepo *repository.PermissionRepo, moduleRepo *repository.ModuleRepo, cache *cache.PermissionCache) *RoleService {
+	return &RoleService{roleRepo: roleRepo, permissionRepo: permissionRepo, moduleRepo: moduleRepo, cache: cache}
 }
 
 func (s *RoleService) Create(req *model.CreateRoleRequest) (*model.Role, error) {
@@ -127,16 +128,19 @@ func (s *RoleService) AssignPermissions(id uint, permIDs []uint) error {
 		return err
 	}
 
-	perms, err := s.permissionRepo.FindByIDs(permIDs)
-	if err != nil {
-		return err
+	// 获取权限实体（空数组则清空关联）
+	var perms []model.Permission
+	if len(permIDs) > 0 {
+		perms, err = s.permissionRepo.FindByIDs(permIDs)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := s.roleRepo.AssignPermissions(role, perms); err != nil {
 		return err
 	}
 
-	// 权限变更后，失效所有拥有该角色的用户的缓存
 	s.invalidateCacheForRole(id)
 	return nil
 }
@@ -155,6 +159,49 @@ func (s *RoleService) RemovePermission(id, permID uint) error {
 	}
 
 	// 权限变更后，失效所有拥有该角色的用户的缓存
+	s.invalidateCacheForRole(id)
+	return nil
+}
+
+func (s *RoleService) AssignModules(id uint, moduleIDs []uint) error {
+	role, err := s.roleRepo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("角色不存在")
+		}
+		return err
+	}
+
+	// 获取模块实体（空数组则清空关联）
+	var modules []model.Module
+	if len(moduleIDs) > 0 {
+		modules, err = s.moduleRepo.FindByIDs(moduleIDs)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := s.roleRepo.AssignModules(role, modules); err != nil {
+		return err
+	}
+
+	s.invalidateCacheForRole(id)
+	return nil
+}
+
+func (s *RoleService) RemoveModule(id, moduleID uint) error {
+	_, err := s.roleRepo.FindByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("角色不存在")
+		}
+		return err
+	}
+
+	if err := s.roleRepo.RemoveModule(id, moduleID); err != nil {
+		return err
+	}
+
 	s.invalidateCacheForRole(id)
 	return nil
 }

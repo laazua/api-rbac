@@ -2,19 +2,19 @@ package errcode
 
 // 通用错误码
 const (
-	Success          = 0
-	UnknownError     = 1000
-	InvalidParams    = 1001
-	Unauthorized     = 1002
-	Forbidden        = 1003
-	NotFound         = 1004
-	InternalError    = 1005
-	AlreadyExists    = 1006
-	TokenExpired     = 1007
-	TokenInvalid     = 1008
-	PasswordWrong    = 1009
-	UserDisabled     = 1010
-	DBError          = 1011
+	Success       = 0
+	UnknownError  = 1000
+	InvalidParams = 1001
+	Unauthorized  = 1002
+	Forbidden     = 1003
+	NotFound      = 1004
+	InternalError = 1005
+	AlreadyExists = 1006
+	TokenExpired  = 1007
+	TokenInvalid  = 1008
+	PasswordWrong = 1009
+	UserDisabled  = 1010
+	DBError       = 1011
 )
 
 var codeMsg = map[int]string{

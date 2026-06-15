@@ -3,10 +3,10 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	jwtpkg "github.com/laazua/api-rbac/pkg/jwt"
 	"github.com/laazua/api-rbac/internal/model"
 	"github.com/laazua/api-rbac/internal/service"
 	"github.com/laazua/api-rbac/pkg/errcode"
+	jwtpkg "github.com/laazua/api-rbac/pkg/jwt"
 	"github.com/laazua/api-rbac/pkg/response"
 )
 
@@ -21,12 +21,13 @@ func getUserID(c *gin.Context) (uint, bool) {
 }
 
 type AuthHandler struct {
-	authService  *service.AuthService
-	permService  *service.PermissionCheckService
+	authService   *service.AuthService
+	permService   *service.PermissionCheckService
+	moduleService *service.ModuleService
 }
 
-func NewAuthHandler(authService *service.AuthService, permService *service.PermissionCheckService) *AuthHandler {
-	return &AuthHandler{authService: authService, permService: permService}
+func NewAuthHandler(authService *service.AuthService, permService *service.PermissionCheckService, moduleService *service.ModuleService) *AuthHandler {
+	return &AuthHandler{authService: authService, permService: permService, moduleService: moduleService}
 }
 
 // Login 用户登录
@@ -279,4 +280,76 @@ func (h *AuthHandler) BatchCheck(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"results": results})
+}
+
+// Modules 获取用户可见模块列表
+// @Summary      获取用户模块
+// @Description  返回当前用户有权限访问的模块列表，每个模块包含该用户在此模块下的权限。用于前端生成模块卡片仪表盘。
+// @Tags         认证
+// @Security     BearerAuth
+// @Produce      json
+// @Success      200  {object}  response.Response{data=object{modules=array}}  "查询成功"
+// @Router       /auth/modules [get]
+func (h *AuthHandler) Modules(c *gin.Context) {
+	uid, ok := getUserID(c)
+	if !ok {
+		response.Error(c, errcode.Unauthorized)
+		return
+	}
+
+	// 获取用户所有权限
+	perms, err := h.permService.GetUserPermissions(uid)
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	// 判断是否为超级管理员（拥有 *:* 通配符权限）
+	// 注意：不能用 perms["*"] 判断，因为 aggregatePermissions 会把 *:* 展开成具体资源
+	isSuperAdmin, err := h.permService.HasWildcard(uid)
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.InternalError, err.Error())
+		return
+	}
+
+	var modules []model.Module
+	if isSuperAdmin {
+		// 超级管理员：返回所有启用的模块
+		modules, err = h.moduleService.GetAllEnabledModules()
+	} else {
+		// 普通用户：通过角色→权限→模块推导
+		modules, err = h.moduleService.GetUserModules(uid)
+	}
+	if err != nil {
+		response.ErrorWithMsg(c, errcode.InternalError, err.Error())
+		return
+	}
+
+	// 为每个模块附加该用户拥有的权限
+	type moduleWithPerms struct {
+		ID          uint                `json:"id"`
+		Name        string              `json:"name"`
+		Code        string              `json:"code"`
+		Icon        string              `json:"icon"`
+		Description string              `json:"description"`
+		Sort        int                 `json:"sort"`
+		Status      int                 `json:"status"`
+		Permissions map[string][]string `json:"permissions"`
+	}
+
+	result := make([]moduleWithPerms, 0, len(modules))
+	for _, m := range modules {
+		result = append(result, moduleWithPerms{
+			ID:          m.ID,
+			Name:        m.Name,
+			Code:        m.Code,
+			Icon:        m.Icon,
+			Description: m.Description,
+			Sort:        m.Sort,
+			Status:      m.Status,
+			Permissions: perms,
+		})
+	}
+
+	response.Success(c, gin.H{"modules": result})
 }

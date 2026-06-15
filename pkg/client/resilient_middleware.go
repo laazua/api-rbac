@@ -19,11 +19,11 @@ const (
 
 // 全局共享的缓存和熔断器状态 (所有 ResilientGuard 共用)
 var (
-	resilientCacheStore     = make(map[string]cacheEntry)
-	resilientMu             sync.Mutex
-	resilientFailCount      int
-	resilientCircuitOpen    bool
-	resilientCircuitSince   time.Time
+	resilientCacheStore   = make(map[string]cacheEntry)
+	resilientMu           sync.Mutex
+	resilientFailCount    int
+	resilientCircuitOpen  bool
+	resilientCircuitSince time.Time
 )
 
 // ResilientGuard 返回一个带韧性能力的 Gin 权限校验中间件。

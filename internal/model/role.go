@@ -5,6 +5,7 @@ type Role struct {
 	Name        string       `json:"name" gorm:"type:varchar(64);uniqueIndex;not null"`
 	Description string       `json:"description" gorm:"type:varchar(255);default:''"`
 	Permissions []Permission `json:"permissions,omitempty" gorm:"many2many:role_permissions;"`
+	Modules     []Module     `json:"modules,omitempty" gorm:"many2many:role_modules;"`
 }
 
 func (Role) TableName() string {
@@ -25,12 +26,17 @@ type UpdateRoleRequest struct {
 
 // AssignPermissionsRequest 为角色分配权限请求
 type AssignPermissionsRequest struct {
-	PermissionIDs []uint `json:"permission_ids" binding:"required"` // 例: [1, 2, 3]
+	PermissionIDs []uint `json:"permission_ids"` // 例: [1, 2, 3]，传空数组则清空权限
+}
+
+// AssignModulesRequest 为角色分配模块请求
+type AssignModulesRequest struct {
+	ModuleIDs []uint `json:"module_ids"` // 例: [1, 2]，传空数组则清空模块
 }
 
 // ListRoleRequest 角色列表查询
 type ListRoleRequest struct {
 	Page     int    `form:"page" binding:"omitempty,min=1" example:"1"`
-	PageSize int    `form:"page_size" binding:"omitempty,min=1,max=100" example:"10"`
+	PageSize int    `form:"page_size" binding:"omitempty,min=1,max=1000" example:"10"`
 	Keyword  string `form:"keyword" example:"管理员"`
 }

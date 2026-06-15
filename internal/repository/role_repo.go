@@ -20,7 +20,7 @@ func (r *RoleRepo) Create(role *model.Role) error {
 
 func (r *RoleRepo) FindByID(id uint) (*model.Role, error) {
 	var role model.Role
-	err := r.db.Preload("Permissions").First(&role, id).Error
+	err := r.db.Preload("Permissions").Preload("Modules").First(&role, id).Error
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (r *RoleRepo) List(page, pageSize int, keyword string) ([]model.Role, int64
 	if offset > 10000 {
 		offset = 10000
 	}
-	err := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&roles).Error
+	err := query.Preload("Modules").Preload("Permissions").Offset(offset).Limit(pageSize).Order("id DESC").Find(&roles).Error
 	return roles, total, err
 }
 
@@ -94,6 +94,14 @@ func (r *RoleRepo) FindUserIDsByRoleID(roleID uint) ([]uint, error) {
 	var userIDs []uint
 	err := r.db.Table("user_roles").Where("role_id = ?", roleID).Pluck("user_id", &userIDs).Error
 	return userIDs, err
+}
+
+func (r *RoleRepo) AssignModules(role *model.Role, modules []model.Module) error {
+	return r.db.Model(role).Association("Modules").Replace(modules)
+}
+
+func (r *RoleRepo) RemoveModule(roleID, moduleID uint) error {
+	return r.db.Model(&model.Role{BaseModel: model.BaseModel{ID: roleID}}).Association("Modules").Delete(&model.Module{BaseModel: model.BaseModel{ID: moduleID}})
 }
 
 func (r *RoleRepo) ExistsByName(name string, excludeID ...uint) (bool, error) {

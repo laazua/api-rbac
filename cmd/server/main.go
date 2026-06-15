@@ -110,6 +110,7 @@ func main() {
 		&model.Role{},
 		&model.Permission{},
 		&model.ServiceAccount{},
+		&model.Module{},
 	); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
@@ -124,21 +125,24 @@ func main() {
 	roleRepo := repository.NewRoleRepo(db)
 	permRepo := repository.NewPermissionRepo(db)
 	saRepo := repository.NewServiceAccountRepo(db)
+	moduleRepo := repository.NewModuleRepo(db)
 
 	// 初始化 Service
 	authService := service.NewAuthService(userRepo)
 	permCheckService := service.NewPermissionCheckService(userRepo, permCache)
 	userService := service.NewUserService(userRepo, roleRepo, permCache)
-	roleService := service.NewRoleService(roleRepo, permRepo, permCache)
+	roleService := service.NewRoleService(roleRepo, permRepo, moduleRepo, permCache)
 	permService := service.NewPermissionService(permRepo)
 	saService := service.NewServiceAccountService(saRepo)
+	moduleService := service.NewModuleService(moduleRepo)
 
 	// 初始化 Handler
-	authH := handler.NewAuthHandler(authService, permCheckService)
+	authH := handler.NewAuthHandler(authService, permCheckService, moduleService)
 	userH := handler.NewUserHandler(userService)
 	roleH := handler.NewRoleHandler(roleService)
 	permH := handler.NewPermissionHandler(permService)
 	saH := handler.NewServiceAccountHandler(saService)
+	moduleH := handler.NewModuleHandler(moduleService)
 
 	// 初始化默认 Service Account (首次运行)
 	if err := initDefaultServiceAccount(saService); err != nil {
@@ -146,7 +150,7 @@ func main() {
 	}
 
 	// 设置路由
-	r := router.Setup(authH, userH, roleH, permH, saH, cfg, permCheckService, saRepo)
+	r := router.Setup(authH, userH, roleH, permH, saH, moduleH, cfg, permCheckService, saRepo)
 
 	// 创建 HTTP Server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -193,7 +197,11 @@ func initSuperAdmin(db *gorm.DB) error {
 	}
 
 	if count > 0 {
-		log.Println("[初始化] 超级管理员已存在，跳过")
+		log.Println("[初始化] 超级管理员已存在，检查模块数据...")
+		// 确保默认模块存在（兼容旧版本升级）
+		if err := ensureDefaultModule(db); err != nil {
+			return fmt.Errorf("初始化默认模块失败: %w", err)
+		}
 		return nil
 	}
 
@@ -208,18 +216,32 @@ func initSuperAdmin(db *gorm.DB) error {
 
 	// 在事务中完成所有初始化，保证原子性
 	err = db.Transaction(func(tx *gorm.DB) error {
-		// 1. 创建通配符权限
+		// 1. 创建默认模块"系统管理"
+		sysModule := model.Module{
+			Name:        "系统管理",
+			Code:        "system_mgmt",
+			Icon:        "el-icon-setting",
+			Description: "用户、角色、权限、模块等系统管理功能",
+			Sort:        1,
+			Status:      1,
+		}
+		if err := tx.Create(&sysModule).Error; err != nil {
+			return fmt.Errorf("创建默认模块失败: %w", err)
+		}
+
+		// 2. 创建通配符权限（关联到系统管理模块）
 		perm := model.Permission{
 			Name:        "超级管理员权限",
 			Resource:    "*",
 			Action:      "*",
 			Description: "拥有所有资源的所有操作权限",
+			ModuleID:    &sysModule.ID,
 		}
 		if err := tx.Create(&perm).Error; err != nil {
 			return fmt.Errorf("创建权限失败: %w", err)
 		}
 
-		// 2. 创建超级管理员角色
+		// 3. 创建超级管理员角色
 		role := model.Role{
 			Name:        "超级管理员",
 			Description: "内置超级管理员角色，拥有全部权限",
@@ -228,12 +250,12 @@ func initSuperAdmin(db *gorm.DB) error {
 			return fmt.Errorf("创建角色失败: %w", err)
 		}
 
-		// 3. 绑定权限到角色
+		// 4. 绑定权限到角色
 		if err := tx.Model(&role).Association("Permissions").Append(&perm); err != nil {
 			return fmt.Errorf("绑定权限到角色失败: %w", err)
 		}
 
-		// 4. 创建 admin 用户
+		// 5. 创建 admin 用户
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
 			return fmt.Errorf("密码加密失败: %w", err)
@@ -249,7 +271,7 @@ func initSuperAdmin(db *gorm.DB) error {
 			return fmt.Errorf("创建admin用户失败: %w", err)
 		}
 
-		// 5. 绑定角色到用户
+		// 6. 绑定角色到用户
 		if err := tx.Model(&user).Association("Roles").Append(&role); err != nil {
 			return fmt.Errorf("绑定角色到用户失败: %w", err)
 		}
@@ -264,6 +286,7 @@ func initSuperAdmin(db *gorm.DB) error {
 	log.Println("========================================")
 	log.Println("  ✅ 超级管理员初始化完成")
 	log.Println("     用户名: admin")
+	log.Println("     默认模块: 系统管理 (system_mgmt)")
 	log.Println("========================================")
 	return nil
 }
@@ -304,6 +327,48 @@ func readPasswordFromTerminal() (string, error) {
 	}
 
 	return "", fmt.Errorf("超过最大重试次数")
+}
+
+// ensureDefaultModule 确保默认模块存在，用于旧版本升级兼容
+func ensureDefaultModule(db *gorm.DB) error {
+	var modCount int64
+	if err := db.Model(&model.Module{}).Count(&modCount).Error; err != nil {
+		return fmt.Errorf("查询模块数量失败: %w", err)
+	}
+
+	if modCount > 0 {
+		log.Println("[初始化] 模块数据已存在，跳过")
+		return nil
+	}
+
+	log.Println("[初始化] 创建默认模块...")
+
+	err := db.Transaction(func(tx *gorm.DB) error {
+		// 1. 创建默认模块"系统管理"
+		sysModule := model.Module{
+			Name:        "系统管理",
+			Code:        "system_mgmt",
+			Icon:        "el-icon-setting",
+			Description: "用户、角色、权限、模块等系统管理功能",
+			Sort:        1,
+			Status:      1,
+		}
+		if err := tx.Create(&sysModule).Error; err != nil {
+			return fmt.Errorf("创建默认模块失败: %w", err)
+		}
+
+		// 2. 更新已有的通配符权限，关联到默认模块
+		if err := tx.Model(&model.Permission{}).
+			Where("resource = ? AND action = ?", "*", "*").
+			Update("module_id", sysModule.ID).Error; err != nil {
+			log.Printf("[初始化] 更新已有权限的模块关联失败（可忽略）: %v", err)
+		}
+
+		log.Printf("[初始化] ✅ 默认模块「系统管理」已创建 (ID=%d)，已有通配符权限已关联", sysModule.ID)
+		return nil
+	})
+
+	return err
 }
 
 // initDefaultServiceAccount 首次运行时创建一个默认服务账号

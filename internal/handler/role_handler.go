@@ -195,6 +195,62 @@ func (h *RoleHandler) AssignPermissions(c *gin.Context) {
 	response.Success(c, nil)
 }
 
+// AssignModules 为角色分配模块
+// @Summary      为角色分配模块
+// @Description  覆盖式更新角色的可访问模块列表（用户有了模块才能看到门户卡片）
+// @Tags         角色管理
+// @Security     BearerAuth
+// @Accept       json
+// @Produce      json
+// @Param        id      path int                      true "角色ID"
+// @Param        request body model.AssignModulesRequest true "模块ID列表"
+// @Success      200  {object}  response.Response  "分配成功"
+// @Failure      404  {object}  response.Response  "角色不存在"
+// @Router       /roles/{id}/modules [post]
+func (h *RoleHandler) AssignModules(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.InvalidParams)
+		return
+	}
+
+	var req model.AssignModulesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ErrorWithMsg(c, errcode.InvalidParams, err.Error())
+		return
+	}
+
+	if err := h.roleService.AssignModules(uint(id), req.ModuleIDs); err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	response.Success(c, nil)
+}
+
+// RemoveModule 移除角色模块
+// @Summary      移除角色模块
+// @Description  移除角色的某个模块访问权限
+// @Tags         角色管理
+// @Security     BearerAuth
+// @Produce      json
+// @Param        id   path int true "角色ID"
+// @Param        modId path int true "模块ID"
+// @Success      200  {object}  response.Response  "移除成功"
+// @Failure      404  {object}  response.Response  "角色不存在"
+// @Router       /roles/{id}/modules/{modId} [delete]
+func (h *RoleHandler) RemoveModule(c *gin.Context) {
+	id, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	modID, _ := strconv.ParseUint(c.Param("modId"), 10, 64)
+
+	if err := h.roleService.RemoveModule(uint(id), uint(modID)); err != nil {
+		response.ErrorWithMsg(c, errcode.NotFound, err.Error())
+		return
+	}
+
+	response.Success(c, nil)
+}
+
 // RemovePermission 移除角色权限
 // @Summary      移除角色权限
 // @Description  移除角色的某个权限

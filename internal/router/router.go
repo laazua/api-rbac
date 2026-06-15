@@ -18,6 +18,7 @@ func Setup(
 	roleH *handler.RoleHandler,
 	permH *handler.PermissionHandler,
 	saH *handler.ServiceAccountHandler,
+	moduleH *handler.ModuleHandler,
 	cfg *config.Config,
 	permCheckSvc *service.PermissionCheckService,
 	saRepo *repository.ServiceAccountRepo,
@@ -50,12 +51,13 @@ func Setup(
 		authed := api.Group("")
 		authed.Use(middleware.AuthRequired(saRepo))
 		{
-			// 登出 & Token验证 & 权限检查 & 菜单
+			// 登出 & Token验证 & 权限检查 & 菜单 & 模块
 			authed.POST("/auth/logout", authH.Logout)
 			authed.POST("/auth/verify", authH.Verify)
 			authed.POST("/auth/check", authH.Check)
 			authed.POST("/auth/batch-check", authH.BatchCheck)
 			authed.GET("/auth/menu", authH.Menu)
+			authed.GET("/auth/modules", authH.Modules)
 
 			// ---- 用户管理 ----
 			users := authed.Group("/users")
@@ -89,6 +91,8 @@ func Setup(
 				rolesWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "role", "delete"), roleH.Delete)
 				rolesWrite.POST("/:id/permissions", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.AssignPermissions)
 				rolesWrite.DELETE("/:id/permissions/:permId", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.RemovePermission)
+				rolesWrite.POST("/:id/modules", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.AssignModules)
+				rolesWrite.DELETE("/:id/modules/:modId", middleware.RequirePermission(permCheckSvc, "role", "update"), roleH.RemoveModule)
 			}
 
 			// ---- 权限管理 ----
@@ -117,6 +121,20 @@ func Setup(
 				saWrite.POST("", middleware.RequirePermission(permCheckSvc, "service_account", "create"), saH.Create)
 				saWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "service_account", "update"), saH.Update)
 				saWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "service_account", "delete"), saH.Delete)
+			}
+
+			// ---- 模块管理 ----
+			modules := authed.Group("/modules")
+			modules.Use(middleware.RequirePermission(permCheckSvc, "module", "read"))
+			{
+				modules.GET("", moduleH.List)
+				modules.GET("/:id", moduleH.GetByID)
+			}
+			modulesWrite := authed.Group("/modules")
+			{
+				modulesWrite.POST("", middleware.RequirePermission(permCheckSvc, "module", "create"), moduleH.Create)
+				modulesWrite.PUT("/:id", middleware.RequirePermission(permCheckSvc, "module", "update"), moduleH.Update)
+				modulesWrite.DELETE("/:id", middleware.RequirePermission(permCheckSvc, "module", "delete"), moduleH.Delete)
 			}
 		}
 	}

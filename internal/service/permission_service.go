@@ -33,6 +33,7 @@ func (s *PermissionService) Create(req *model.CreatePermissionRequest) (*model.P
 			existing.Resource = req.Resource
 			existing.Action = req.Action
 			existing.Description = req.Description
+			existing.ModuleID = req.ModuleID
 			if err := s.permRepo.Update(existing); err != nil {
 				return nil, err
 			}
@@ -46,6 +47,7 @@ func (s *PermissionService) Create(req *model.CreatePermissionRequest) (*model.P
 		Resource:    req.Resource,
 		Action:      req.Action,
 		Description: req.Description,
+		ModuleID:    req.ModuleID,
 	}
 
 	if err := s.permRepo.Create(perm); err != nil {
@@ -96,6 +98,7 @@ func (s *PermissionService) Update(id uint, req *model.UpdatePermissionRequest) 
 	perm.Resource = req.Resource
 	perm.Action = req.Action
 	perm.Description = req.Description
+	perm.ModuleID = req.ModuleID
 	return s.permRepo.Update(perm)
 }
 

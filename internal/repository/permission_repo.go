@@ -60,7 +60,7 @@ func (r *PermissionRepo) List(page, pageSize int, keyword string) ([]model.Permi
 }
 
 func (r *PermissionRepo) Update(perm *model.Permission) error {
-	return r.db.Model(perm).Select("name", "resource", "action", "description", "updated_at").Updates(perm).Error
+	return r.db.Model(perm).Select("name", "resource", "action", "description", "module_id", "updated_at").Updates(perm).Error
 }
 
 func (r *PermissionRepo) Delete(id uint) error {

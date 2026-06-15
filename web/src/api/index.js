@@ -173,6 +173,14 @@ export function removeRolePermission(id, permId) {
   return request.delete(`/roles/${id}/permissions/${permId}`)
 }
 
+export function assignRoleModules(id, moduleIds) {
+  return request.post(`/roles/${id}/modules`, { module_ids: moduleIds })
+}
+
+export function removeRoleModule(id, moduleId) {
+  return request.delete(`/roles/${id}/modules/${moduleId}`)
+}
+
 // ===== 权限管理 =====
 
 export function getPermissions(params) {
@@ -193,4 +201,31 @@ export function updatePermission(id, data) {
 
 export function deletePermission(id) {
   return request.delete(`/permissions/${id}`)
+}
+
+// ===== 模块管理 =====
+
+/** 获取当前用户可见的模块列表（含权限） */
+export function getUserModules() {
+  return request.get('/auth/modules')
+}
+
+export function getModules(params) {
+  return request.get('/modules', { params })
+}
+
+export function getModule(id) {
+  return request.get(`/modules/${id}`)
+}
+
+export function createModule(data) {
+  return request.post('/modules', data)
+}
+
+export function updateModule(id, data) {
+  return request.put(`/modules/${id}`, data)
+}
+
+export function deleteModule(id) {
+  return request.delete(`/modules/${id}`)
 }

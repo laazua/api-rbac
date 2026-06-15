@@ -57,6 +57,6 @@ type RefreshTokenRequest struct {
 // ListUserRequest 用户列表查询
 type ListUserRequest struct {
 	Page     int    `form:"page" binding:"omitempty,min=1" example:"1"`
-	PageSize int    `form:"page_size" binding:"omitempty,min=1,max=100" example:"10"`
+	PageSize int    `form:"page_size" binding:"omitempty,min=1,max=1000" example:"10"`
 	Keyword  string `form:"keyword" example:"admin"`
 }

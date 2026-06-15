@@ -84,9 +84,11 @@ func aggregatePermissions(roles []model.Role) map[string][]string {
 	// 通配符 *:* 拥有全部权限
 	if hasWildcard(permMap) {
 		return map[string][]string{
-			"user":       {"read", "create", "update", "delete"},
-			"role":       {"read", "create", "update", "delete"},
-			"permission": {"read", "create", "update", "delete"},
+			"user":            {"read", "create", "update", "delete"},
+			"role":            {"read", "create", "update", "delete"},
+			"permission":      {"read", "create", "update", "delete"},
+			"module":          {"read", "create", "update", "delete"},
+			"service_account": {"read", "create", "update", "delete"},
 		}
 	}
 
@@ -157,4 +159,21 @@ func (s *PermissionCheckService) BatchCheckPermission(userID uint, items []Batch
 		results[key] = matchPermissionMap(perms, item.Resource, item.Action)
 	}
 	return results, nil
+}
+
+// HasWildcard 判断用户是否拥有 *:* 超级管理员通配符权限
+// 直接查库，不受 aggregatePermissions 的展开影响
+func (s *PermissionCheckService) HasWildcard(userID uint) (bool, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return false, err
+	}
+	for _, role := range user.Roles {
+		for _, perm := range role.Permissions {
+			if perm.Resource == "*" && perm.Action == "*" {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }

@@ -3,7 +3,7 @@
     <!-- 侧边栏 -->
     <el-aside :width="collapsed ? '64px' : '220px'" class="layout-sidebar">
       <div class="sidebar-brand">
-        <span v-show="!collapsed">RBAC 管理系统</span>
+        <span v-show="!collapsed">权限管理系统</span>
         <span v-show="collapsed" style="font-size:14px">RBAC</span>
       </div>
       <el-menu
@@ -35,7 +35,7 @@
             class="collapse-btn"
             @click="collapsed = !collapsed"
           />
-          <span class="logo">RBAC 权限管理系统</span>
+          <el-button type="text" icon="el-icon-back" style="margin-left:4px" @click="goPortal">返回门户</el-button>
         </div>
         <el-dropdown trigger="click" @command="handleCommand">
           <span class="user-info">
@@ -89,10 +89,14 @@ export default {
     })
   },
   methods: {
+    goPortal() {
+      this.$router.push('/portal')
+    },
     handleCommand(cmd) {
       if (cmd === 'logout') {
         localStorage.removeItem('token')
         localStorage.removeItem('username')
+        localStorage.removeItem('permissions')
         this.$router.push('/login')
         this.$message.success('已退出登录')
       }

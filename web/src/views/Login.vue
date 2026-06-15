@@ -60,7 +60,7 @@ export default {
             localStorage.setItem('permissions', JSON.stringify(menuRes.data.permissions || {}))
           } catch { /* 忽略 */ }
           this.$message.success('登录成功')
-          this.$router.push('/dashboard')
+          this.$router.push('/portal')
         } catch {
           // 错误已在拦截器中处理
         } finally {

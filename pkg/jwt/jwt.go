@@ -20,8 +20,8 @@ type Claims struct {
 }
 
 var (
-	secret          string
-	expireHour      int
+	secret           string
+	expireHour       int
 	refreshExpireDay int
 
 	ErrTokenExpired = errors.New("token已过期")
