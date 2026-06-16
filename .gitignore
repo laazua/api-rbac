@@ -29,3 +29,16 @@ config/config.yaml
 # 临时文件
 tmp/
 temp/
+
+# 前端构建产物
+web/dist/
+
+# 示例项目 — 构建产物与依赖
+examples/*/web/node_modules/
+examples/*/web/dist/
+examples/*/node_modules/
+examples/*/dist/
+examples/*/target/
+examples/*/__pycache__/
+examples/*/*.pyc
+examples/*/venv/
