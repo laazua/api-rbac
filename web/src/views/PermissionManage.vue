@@ -62,14 +62,31 @@
         <!--  <span style="font-size:12px;color:#909399">"{resource}:{action}" 组合确定一个权限；"*" 为通配符</span> -->
         </el-form-item>
         <el-form-item label="操作" prop="action">
-          <el-select v-model="form.action" placeholder="选择操作" style="width:100%">
+          <el-select v-model="form.action" placeholder="选择或输入操作" style="width:100%"
+            filterable allow-create default-first-option>
             <el-option label="create (创建)" value="create" />
             <el-option label="read (读取)" value="read" />
             <el-option label="update (更新)" value="update" />
             <el-option label="delete (删除)" value="delete" />
             <el-option label="manage (管理)" value="manage" />
             <el-option label="publish (发布)" value="publish" />
+            <el-option label="execute (执行)" value="execute" />
+            <el-option label="restart (重启)" value="restart" />
+            <el-option label="stop (停止)" value="stop" />
+            <el-option label="rollback (回滚)" value="rollback" />
+            <el-option label="ack (确认)" value="ack" />
             <el-option label="* (全部)" value="*" />
+          </el-select>
+          <span style="font-size:12px;color:#909399">支持手动输入自定义 action（如 ack、export、deploy 等）</span>
+        </el-form-item>
+        <el-form-item label="所属模块" prop="module_id">
+          <el-select v-model="form.module_id" placeholder="选择所属模块（可选）" style="width:100%" clearable>
+            <el-option
+              v-for="m in moduleList"
+              :key="m.id"
+              :label="`${m.name} (${m.code})`"
+              :value="m.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="描述" prop="description">
@@ -87,7 +104,8 @@
 
 <script>
 import {
-  getPermissions, createPermission, updatePermission, deletePermission, hasPermission
+  getPermissions, createPermission, updatePermission, deletePermission,
+  getModules, hasPermission
 } from '../api'
 
 export default {
@@ -97,7 +115,8 @@ export default {
       search: { page: 1, page_size: 10, keyword: '' },
       tableData: [], total: 0, loading: false,
       dialogVisible: false, isEdit: false, submitting: false,
-      form: { name: '', resource: '', action: '', description: '' },
+      form: { name: '', resource: '', action: '', description: '', module_id: null },
+      moduleList: [],
       formRules: {
         name: [{ required: true, message: '请输入权限名称', trigger: 'blur' }],
         resource: [{ required: true, message: '请输入资源标识', trigger: 'blur' }],
@@ -122,14 +141,23 @@ export default {
     formatTime(t) { return t ? new Date(t).toLocaleString() : '-' },
     openCreate() {
       this.isEdit = false
-      this.form = { name: '', resource: '', action: '', description: '' }
+      this.form = { name: '', resource: '', action: '', description: '', module_id: null }
+      this.loadModules()
       this.dialogVisible = true
     },
     openEdit(row) {
       this.isEdit = true
       this.currentPermId = row.id
-      this.form = { name: row.name, resource: row.resource, action: row.action, description: row.description }
+      this.form = { name: row.name, resource: row.resource, action: row.action, description: row.description, module_id: row.module_id || null }
+      this.loadModules()
       this.dialogVisible = true
+    },
+    async loadModules() {
+      if (this.moduleList.length > 0) return
+      try {
+        const res = await getModules({ page: 1, page_size: 200 })
+        this.moduleList = res.data.list || []
+      } catch { /* 忽略 */ }
     },
     async handleSubmit() {
       this.$refs.permForm.validate(async valid => {

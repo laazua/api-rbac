@@ -41,7 +41,7 @@
 </template>
 
 <script>
-import { getModules } from '../api'
+import { getUserModules } from '../api'
 
 export default {
   name: 'ModuleFrame',
@@ -64,9 +64,9 @@ export default {
       this.loading = true
       this.loadError = false
       try {
-        // 通过编码查找模块，获取其 URL
-        const res = await getModules({ page: 1, page_size: 200 })
-        const list = res.data.list || []
+        // 用用户模块接口（无需额外权限，返回当前用户可见模块）
+        const res = await getUserModules()
+        const list = res.data.modules || []
         const mod = list.find(m => m.code === this.moduleCode)
 
         if (!mod) {

@@ -356,6 +356,7 @@ func (h *AuthHandler) Modules(c *gin.Context) {
 		Description string              `json:"description"`
 		Sort        int                 `json:"sort"`
 		Status      int                 `json:"status"`
+		Url         string              `json:"url"`
 		Permissions map[string][]string `json:"permissions"`
 	}
 
@@ -369,6 +370,7 @@ func (h *AuthHandler) Modules(c *gin.Context) {
 			Description: m.Description,
 			Sort:        m.Sort,
 			Status:      m.Status,
+			Url:         m.Url,
 			Permissions: perms,
 		})
 	}

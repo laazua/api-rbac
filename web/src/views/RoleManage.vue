@@ -276,17 +276,11 @@ export default {
       this.$nextTick(() => this.buildGroupedPerms())
     },
     buildGroupedPerms() {
-      if (this.selectedModules.length === 0) {
-        this.groupedPerms = []
-        return
-      }
-
       // 找出已选模块的信息
       const selectedModIds = new Set(this.selectedModules)
       const modMap = {}
       this.moduleList.forEach(m => {
         if (selectedModIds.has(m.id)) {
-          // 从名称中解析出 moduleName (code) 格式
           const match = m.name.match(/^(.+?)\s*\((.+?)\)$/)
           modMap[m.id] = {
             id: m.id,
@@ -297,9 +291,7 @@ export default {
         }
       })
 
-      // 需要从原始 module 数据获取 icon（从之前 fetch 的 modules 数据）
-      // 这里从 moduleList 中无法直接获取 icon，需要在 openAssign 中保存原始数据
-      // 简化处理：直接从保存的原始数据中匹配
+      // 从原始 module 数据获取 icon
       if (this._rawModules) {
         this._rawModules.forEach(m => {
           if (modMap[m.id]) {
@@ -308,10 +300,19 @@ export default {
         })
       }
 
-      // 按模块分组权限
+      // 按模块分组权限 (仅 module_id 匹配的)
       const groups = {}
+      const unassignedPerms = []  // 未归属任何模块的权限
       this.allPerms.forEach(p => {
-        if (!p.module_id || !selectedModIds.has(p.module_id)) return
+        if (!p.module_id) {
+          // 没有 module_id 的权限归入"未归属"
+          unassignedPerms.push({
+            id: p.id,
+            display: `${p.name} (${p.resource}:${p.action})`
+          })
+          return
+        }
+        if (!selectedModIds.has(p.module_id)) return
         if (!groups[p.module_id]) {
           groups[p.module_id] = []
         }
@@ -320,6 +321,18 @@ export default {
           display: `${p.name} (${p.resource}:${p.action})`
         })
       })
+
+      // 如果没有选中任何模块, 显示全部未归属权限
+      if (this.selectedModules.length === 0 && unassignedPerms.length > 0) {
+        this.groupedPerms = [{
+          moduleId: 0,
+          moduleName: '未归属模块的权限',
+          moduleCode: 'unassigned',
+          icon: 'el-icon-warning-outline',
+          perms: unassignedPerms
+        }]
+        return
+      }
 
       // 构建最终的 groupedPerms
       this.groupedPerms = Object.keys(groups).map(modId => {
@@ -333,11 +346,22 @@ export default {
           perms: groups[id]
         }
       })
+
+      // 如果有已选模块 + 存在未归属权限 → 追加显示
+      if (unassignedPerms.length > 0) {
+        this.groupedPerms.push({
+          moduleId: 0,
+          moduleName: '未归属模块的权限',
+          moduleCode: 'unassigned',
+          icon: 'el-icon-warning-outline',
+          perms: unassignedPerms
+        })
+      }
     },
     selectAllInGroup(modId) {
       const ids = []
       this.allPerms.forEach(p => {
-        if (p.module_id === modId) ids.push(p.id)
+        if (modId === 0 ? !p.module_id : p.module_id === modId) ids.push(p.id)
       })
       // 合并去重
       const set = new Set([...this.selectedPerms, ...ids])
@@ -346,7 +370,7 @@ export default {
     clearGroup(modId) {
       const removeIds = new Set()
       this.allPerms.forEach(p => {
-        if (p.module_id === modId) removeIds.add(p.id)
+        if (modId === 0 ? !p.module_id : p.module_id === modId) removeIds.add(p.id)
       })
       this.selectedPerms = this.selectedPerms.filter(id => !removeIds.has(id))
     },

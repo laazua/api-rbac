@@ -1,381 +1,220 @@
-// 运维管理系统 — Go net/http 实现
+// 运维管理系统 — Go + Gin 实现
 //
 // 完整演示如何将 api-rbac 作为独立的权限管理微服务与 Go 业务系统集成。
-// 使用项目内置 SDK (pkg/client), 支持韧性降级。
+// 使用项目内置 SDK (pkg/client) 的 ResilientGuard 中间件实现韧性权限校验。
 //
 // 运行: go run . (确保 api-rbac 已启动在 :8087)
 
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 
+	"go-ops-system/internal/handler"
+	"go-ops-system/internal/middleware"
+
+	"github.com/gin-gonic/gin"
 	"github.com/laazua/api-rbac/pkg/client"
 )
 
-// ================================================================
-// 配置
-// ================================================================
-
-const rbacURL = "http://localhost:8087/api/v1"
+const (
+	rbacURL     = "http://localhost:8087/api/v1"
+	opsPort     = ":8083"
+	cacheTTLSec = 300 // 权限缓存 5 分钟
+)
 
 var rbacClient = client.NewRBACClient(rbacURL)
 
-// ================================================================
-// 权限校验中间件 (韧性模式)
-// ================================================================
-
-func requirePermission(resource, action string) func(http.Handler) http.Handler {
-	failCount := 0
-	circuitOpen := false
-	circuitOpened := time.Time{}
-	cache := map[string]struct {
-		perms map[string][]string
-		ts    time.Time
-	}{}
-	var mu sync.Mutex
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			token := extractToken(r)
-			if token == "" {
-				writeJSON(w, 401, 1002, "未提供认证Token")
-				return
-			}
-
-			// 熔断检查
-			mu.Lock()
-			if circuitOpen {
-				if time.Since(circuitOpened) > 30*time.Second {
-					circuitOpen = false
-					failCount = 0
-					mu.Unlock()
-				} else {
-					mu.Unlock()
-					// 走本地缓存
-					if checkFromCache(cache, token, resource, action) {
-						next.ServeHTTP(w, r)
-						return
-					}
-					writeJSON(w, 403, 1003, "权限服务不可用(熔断), 缓存中无权限数据")
-					return
-				}
-			} else {
-				mu.Unlock()
-			}
-
-			// 远程校验
-			resp, err := rbacClient.CheckPermission(token, resource, action)
-			if err == nil && resp.Code == 0 {
-				// 成功 → 异步加载权限到缓存
-				mu.Lock()
-				failCount = 0
-				mu.Unlock()
-				go populateCache(cache, token)
-				if resp.Data.Allowed {
-					next.ServeHTTP(w, r)
-					return
-				}
-				writeJSON(w, 403, 1003, "无权限: "+resource+":"+action)
-				return
-			}
-
-			// 失败 → 记录 + 走缓存
-			mu.Lock()
-			failCount++
-			if failCount >= 5 {
-				circuitOpen = true
-				circuitOpened = time.Now()
-				log.Printf("⚠️ RBAC 熔断触发 (连续 %d 次失败)", failCount)
-			}
-			mu.Unlock()
-
-			if checkFromCache(cache, token, resource, action) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			writeJSON(w, 502, 1005, "权限服务不可用, 缓存中无权限数据")
-		})
-	}
-}
-
-func extractToken(r *http.Request) string {
-	h := r.Header.Get("Authorization")
-	if !strings.HasPrefix(h, "Bearer ") {
-		return ""
-	}
-	return strings.TrimPrefix(h, "Bearer ")
-}
-
-func checkFromCache(cache map[string]struct {
-	perms map[string][]string
-	ts    time.Time
-}, token, resource, action string) bool {
-	entry, ok := cache[token]
-	if !ok || time.Since(entry.ts) > 5*time.Minute {
-		return false
-	}
-	// 通配符匹配
-	if actions, ok := entry.perms["*"]; ok {
-		for _, a := range actions {
-			if a == "*" || a == action {
-				return true
-			}
-		}
-	}
-	if actions, ok := entry.perms[resource]; ok {
-		for _, a := range actions {
-			if a == "*" || a == action {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func populateCache(cache map[string]struct {
-	perms map[string][]string
-	ts    time.Time
-}, token string) {
-	resp, err := rbacClient.GetMenu(token)
-	if err != nil || resp.Code != 0 {
-		return
-	}
-	var mu sync.Mutex // local lock just for this cache map
-	mu.Lock()
-	cache[token] = struct {
-		perms map[string][]string
-		ts    time.Time
-	}{resp.Data.Permissions, time.Now()}
-	mu.Unlock()
-}
-
-// ================================================================
-// 业务模型
-// ================================================================
-
-type Server struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	IP     string `json:"ip"`
-	Status string `json:"status"`
-}
-
-type Deployment struct {
-	ID      int    `json:"id"`
-	Project string `json:"project"`
-	Version string `json:"version"`
-	Status  string `json:"status"`
-}
-
-type Alert struct {
-	ID      int    `json:"id"`
-	Level   string `json:"level"`
-	Message string `json:"message"`
-	Acked   bool   `json:"acked"`
-}
-
-// 模拟数据库
-var (
-	servers     = []Server{{1, "web-01", "10.0.1.10", "running"}, {2, "web-02", "10.0.1.11", "stopped"}, {3, "db-01", "10.0.2.10", "running"}}
-	deployments = []Deployment{{1, "web-app", "v2.3.1", "success"}, {2, "api-service", "v1.5.0", "failed"}}
-	alerts      = []Alert{{1, "critical", "CPU 使用率 95%", false}, {2, "warning", "磁盘使用率 80%", true}}
-	nextSrvID   atomic.Int64
-	nextDepID   atomic.Int64
-)
-
-func init() {
-	nextSrvID.Store(3)
-	nextDepID.Store(2)
-}
-
-// ================================================================
-// HTTP Handler — 登录 (转发 RBAC)
-// ================================================================
-
-func handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, 405, 1001, "Method Not Allowed")
-		return
-	}
-	var body struct {
-		Account  string `json:"account"`
-		Password string `json:"password"`
-	}
-	json.NewDecoder(r.Body).Decode(&body)
-
-	resp, err := rbacClient.Login(body.Account, body.Password)
-	if err != nil || resp.Code != 0 {
-		writeJSON(w, 401, 1009, "用户名或密码错误")
-		return
-	}
-	writeJSON(w, 200, 0, resp.Data)
-}
-
-func handleRefresh(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-	json.NewDecoder(r.Body).Decode(&body)
-	resp, err := rbacClient.Refresh(body.RefreshToken)
-	if err != nil || resp.Code != 0 {
-		writeJSON(w, 401, 1007, "刷新令牌无效")
-		return
-	}
-	writeJSON(w, 200, 0, resp.Data)
-}
-
-// ================================================================
-// HTTP Handler — 服务器管理
-// ================================================================
-
-func handleServers(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, 200, 0, servers)
-	default:
-		writeJSON(w, 405, 1001, "Method Not Allowed")
-	}
-}
-
-func handleServerRestart(w http.ResponseWriter, r *http.Request) {
-	// ... 解析 ID + 重启逻辑 (简化)
-	writeJSON(w, 200, 0, map[string]string{"message": "服务器重启成功"})
-}
-
-func handleServerStop(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, 0, map[string]string{"message": "服务器已停止"})
-}
-
-// ================================================================
-// HTTP Handler — 发布管理
-// ================================================================
-
-func handleDeployments(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		writeJSON(w, 200, 0, deployments)
-	case http.MethodPost:
-		var body struct {
-			Project string `json:"project"`
-			Version string `json:"version"`
-		}
-		json.NewDecoder(r.Body).Decode(&body)
-		id := int(nextDepID.Add(1))
-		d := Deployment{id, body.Project, body.Version, "success"}
-		deployments = append(deployments, d)
-		writeJSON(w, 200, 0, d)
-	default:
-		writeJSON(w, 405, 1001, "Method Not Allowed")
-	}
-}
-
-func handleDeploymentRollback(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, 0, map[string]string{"message": "发布已回滚"})
-}
-
-// ================================================================
-// HTTP Handler — 告警管理
-// ================================================================
-
-func handleAlerts(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, 0, alerts)
-}
-
-func handleAlertAck(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, 0, map[string]string{"message": "告警已确认"})
-}
-
-// ================================================================
-// 工具函数
-// ================================================================
-
-func writeJSON(w http.ResponseWriter, httpStatus int, code int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(httpStatus)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"code":    code,
-		"message": getMsg(code),
-		"data":    data,
-	})
-}
-
-func getMsg(code int) string {
-	if code == 0 {
-		return "success"
-	}
-	msgs := map[int]string{
-		401: "未授权", 403: "无权限", 404: "资源不存在",
-		405: "方法不允许", 502: "服务不可用", 1001: "参数错误",
-		1002: "未授权", 1003: "无权限", 1005: "服务内部错误",
-		1007: "Token过期", 1008: "Token无效", 1009: "密码错误",
-	}
-	if m, ok := msgs[code]; ok {
-		return m
-	}
-	return "未知错误"
-}
-
-// ================================================================
-// 路由注册
-// ================================================================
-
 func main() {
-	mux := http.NewServeMux()
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.Default()
 
-	// 无需认证
-	mux.HandleFunc("/api/auth/login", handleLogin)
-	mux.HandleFunc("/api/auth/refresh", handleRefresh)
+	// CORS — 允许前端开发模式跨域
+	r.Use(corsMiddleware())
 
-	// 服务器管理
-	mux.Handle("/api/servers",
-		requirePermission("server", "read")(http.HandlerFunc(handleServers)))
-	mux.Handle("/api/servers/restart",
-		requirePermission("server", "restart")(http.HandlerFunc(handleServerRestart)))
-	mux.Handle("/api/servers/stop",
-		requirePermission("server", "stop")(http.HandlerFunc(handleServerStop)))
+	// ================================================================
+	// 初始化 Handler
+	// ================================================================
+	authH := handler.NewAuthHandler(rbacClient)
+	serverH := handler.NewServerHandler()
+	deployH := handler.NewDeploymentHandler()
+	alertH := handler.NewAlertHandler()
 
-	// 发布管理
-	mux.Handle("/api/deployments",
-		requirePermission("deployment", "read")(http.HandlerFunc(handleDeployments)))
-	mux.Handle("/api/deployments/execute",
-		requirePermission("deployment", "execute")(http.HandlerFunc(handleDeployments)))
-	mux.Handle("/api/deployments/rollback",
-		requirePermission("deployment", "rollback")(http.HandlerFunc(handleDeploymentRollback)))
-
-	// 告警管理
-	mux.Handle("/api/alerts",
-		requirePermission("alert", "read")(http.HandlerFunc(handleAlerts)))
-	mux.Handle("/api/alerts/ack",
-		requirePermission("alert", "ack")(http.HandlerFunc(handleAlertAck)))
-
-	// 健康检查
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, 0, map[string]string{"status": "ok"})
+	// ================================================================
+	// 公开路由 (无需认证)
+	// ================================================================
+	r.POST("/api/auth/login", authH.Login)
+	r.POST("/api/auth/refresh", authH.Refresh)
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// ================================================================
+	// 认证路由 (需要 Token 验证, 不检查具体权限)
+	// ================================================================
+	auth := r.Group("/api")
+	auth.Use(middleware.ExtractUserInfo(rbacClient))
+	{
+		// 获取用户全部权限 (供前端菜单/按钮控制)
+		auth.GET("/auth/permissions", authH.GetPermissions)
+	}
+
+	// ================================================================
+	// 业务路由 (需要 Token + 具体权限)
+	//
+	// 使用 ResilientGuard 中间件实现:
+	//   - 远程调用 api-rbac 校验权限
+	//   - 5 次连续失败后自动熔断 30 秒
+	//   - 熔断期间走本地缓存 (5 分钟 TTL)
+	//   - FailModeCache: RBAC 宕机时降级使用缓存
+	// ================================================================
+
+	// --- 服务器管理 ---
+	serverGroup := r.Group("/api/servers")
+	serverGroup.Use(middleware.ExtractUserInfo(rbacClient))
+	{
+		// GET /api/servers → server:read
+		serverGroup.GET("",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "server", "read"),
+			serverH.List)
+		// POST /api/servers → server:create
+		serverGroup.POST("",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "server", "create"),
+			serverH.Create)
+		// DELETE /api/servers/:id → server:delete
+		serverGroup.DELETE("/:id",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "server", "delete"),
+			serverH.Delete)
+	}
+
+	// 服务器操作 (独立路由, 避免与 :id 冲突)
+	serverOps := r.Group("/api/servers")
+	serverOps.Use(middleware.ExtractUserInfo(rbacClient))
+	{
+		// POST /api/servers/restart → server:restart
+		serverOps.POST("/restart",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "server", "restart"),
+			serverH.Restart)
+		// POST /api/servers/stop → server:stop
+		serverOps.POST("/stop",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "server", "stop"),
+			serverH.Stop)
+	}
+
+	// --- 发布管理 ---
+	deployGroup := r.Group("/api/deployments")
+	deployGroup.Use(middleware.ExtractUserInfo(rbacClient))
+	{
+		// GET /api/deployments → deployment:read
+		deployGroup.GET("",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "deployment", "read"),
+			deployH.List)
+		// GET /api/deployments/:id → deployment:read
+		deployGroup.GET("/:id",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "deployment", "read"),
+			deployH.GetByID)
+		// POST /api/deployments → deployment:execute
+		deployGroup.POST("",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "deployment", "execute"),
+			deployH.Execute)
+		// POST /api/deployments/rollback → deployment:rollback
+		deployGroup.POST("/rollback",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "deployment", "rollback"),
+			deployH.Rollback)
+	}
+
+	// --- 告警管理 ---
+	alertGroup := r.Group("/api/alerts")
+	alertGroup.Use(middleware.ExtractUserInfo(rbacClient))
+	{
+		// GET /api/alerts → alert:read
+		alertGroup.GET("",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "alert", "read"),
+			alertH.List)
+		// POST /api/alerts/ack → alert:ack
+		alertGroup.POST("/ack",
+			client.ResilientGuard(rbacClient, client.FailModeCache, cacheTTLSec, "alert", "ack"),
+			alertH.Ack)
+	}
+
+	// ================================================================
+	// 静态文件服务 — 生产模式: 直接 serve 前端构建产物
+	// 开发模式: 前端用 Vite dev server (:5173), 不需要此功能
+	// ================================================================
+	distPath := "./web/dist"
+	if _, err := os.Stat(distPath); err == nil {
+		r.NoRoute(func(c *gin.Context) {
+			// SPA fallback: 非 API 路由返回 index.html (支持前端 hash router)
+			if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
+				c.JSON(http.StatusNotFound, gin.H{"code": 1004, "message": "接口不存在"})
+				return
+			}
+			c.File(distPath + "/index.html")
+		})
+		r.Static("/assets", distPath+"/assets")
+		r.StaticFile("/", distPath+"/index.html")
+		log.Println("  📦 已启用静态文件服务: web/dist/")
+	} else {
+		log.Println("  ℹ️  未找到 web/dist/, 仅提供 API 服务 (前端请用 Vite dev server)")
+	}
+
+	// ================================================================
+	// 优雅关闭
+	// ================================================================
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+		log.Println("正在关闭运维管理系统...")
+		os.Exit(0)
+	}()
+
+	// ================================================================
+	// 启动
+	// ================================================================
 	log.Println("========================================")
-	log.Println("  运维管理系统 (Go net/http)")
+	log.Println("  运维管理系统 (Go + Gin)")
 	log.Printf("  RBAC 服务: %s", rbacURL)
 	log.Println("========================================")
-	log.Println("  端点:")
-	log.Println("    POST /api/auth/login             — 登录")
-	log.Println("    GET  /api/servers                 — 服务器列表 (server:read)")
-	log.Println("    POST /api/servers/restart         — 重启服务器 (server:restart)")
-	log.Println("    POST /api/servers/stop            — 停止服务器 (server:stop)")
-	log.Println("    POST /api/deployments/execute     — 执行发布 (deployment:execute)")
-	log.Println("    POST /api/deployments/rollback    — 回滚发布 (deployment:rollback)")
-	log.Println("    GET  /api/alerts                  — 告警列表 (alert:read)")
-	log.Println("    POST /api/alerts/ack              — 确认告警 (alert:ack)")
+	log.Println("  业务端点:")
+	log.Println("    POST /api/auth/login              — 登录")
+	log.Println("    POST /api/auth/refresh            — 刷新 Token")
+	log.Println("    GET  /api/auth/permissions        — 获取用户权限")
+	log.Println("    GET  /api/servers                 — 服务器列表 [server:read]")
+	log.Println("    POST /api/servers                 — 创建服务器 [server:create]")
+	log.Println("    DELETE /api/servers/:id           — 删除服务器 [server:delete]")
+	log.Println("    POST /api/servers/restart         — 重启服务器 [server:restart]")
+	log.Println("    POST /api/servers/stop            — 停止服务器 [server:stop]")
+	log.Println("    GET  /api/deployments             — 发布列表 [deployment:read]")
+	log.Println("    POST /api/deployments             — 执行发布 [deployment:execute]")
+	log.Println("    POST /api/deployments/rollback    — 回滚发布 [deployment:rollback]")
+	log.Println("    GET  /api/alerts                  — 告警列表 [alert:read]")
+	log.Println("    POST /api/alerts/ack              — 确认告警 [alert:ack]")
+	log.Println("    GET  /health                      — 健康检查")
 	log.Println("========================================")
 
-	if err := http.ListenAndServe(":8081", mux); err != nil {
-		log.Fatal(err)
+	log.Printf("🚀 运维管理系统启动于 http://0.0.0.0%s", opsPort)
+	if err := r.Run(opsPort); err != nil {
+		log.Fatal("服务启动失败:", err)
+	}
+}
+
+// corsMiddleware CORS 中间件 — 允许前端开发模式跨域
+func corsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
+		c.Header("Access-Control-Max-Age", "86400")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
 	}
 }
